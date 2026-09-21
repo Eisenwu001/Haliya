@@ -1,10 +1,10 @@
-# Haliya: Mask of Sorrows ⚔️
+# Haliya: Mask of Sorrows 
 
 A dark fantasy 2D action-adventure platformer built with **Godot Engine 4.7**.
 
 ---
 
-## 📖 Overview
+## Overview
 
 * **Engine**: Godot Engine 4.7 Forward+
 * **Resolution**: 640×360 (rendered with integer scale to 1280×720 window)
@@ -12,7 +12,7 @@ A dark fantasy 2D action-adventure platformer built with **Godot Engine 4.7**.
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 * Download and install [Godot Engine 4.3+ or 4.7](https://godotengine.org/download).
@@ -28,7 +28,7 @@ A dark fantasy 2D action-adventure platformer built with **Godot Engine 4.7**.
 
 ---
 
-## 🧪 QA & Testing
+## QA & Testing
 
 For complete QA guidelines, controls, level-skip debug hotkeys, automated test scripts, and test checklists, refer to:
 👉 **[QA_GUIDE.md](QA_GUIDE.md)**
