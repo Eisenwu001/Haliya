@@ -1,0 +1,33 @@
+# Godot 4+ engine cache
+.godot/
+/android/
+
+# Imported translations
+*.translation
+
+# Mono / C# (if applicable)
+.mono/
+data_*/
+mono_crash.*.json
+
+# Local tools & editor database caches
+.freebuff/
+.agents/
+*.tmp
+*.bak
+
+# Export / Build outputs (so test builds don't bloat git)
+builds/
+export/
+*.apk
+*.aab
+*.exe
+*.pck
+*.dmg
+*.app
+*.ipa
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini

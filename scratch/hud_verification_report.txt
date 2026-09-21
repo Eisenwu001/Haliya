@@ -1,0 +1,19 @@
+=== GANDALF QUEST HUD AUTOMATED VERIFICATION REPORT ===
+Timestamp: 2026-09-08T21:37:56
+PASS: main.tscn instantiated and mounted to tree
+PASS: main.plaque_root created at position (476.0, 10.0) scale (0.155, 0.155)
+INFO: Initial Score Label text: 'KILLS: 0  |  LEVEL 1-1'
+PASS: Score label formatted without emojis: 'KILLS: 0  |  LEVEL 1-1'
+PASS: hp_bar_root created at position (10.0, 10.0) scale (0.2, 0.2)
+PASS: HP fill clip size: (830.0, 60.0) (Max width: 830.0)
+PASS: stamina_bar_root created at position (10.0, 31.0) scale (0.2, 0.2)
+PASS: Stamina fill clip size: (828.0, 61.0) (Max width: 828.0)
+PASS: HP damage triggered both smooth fill loss tween and trailing ghost tween
+PASS: Stamina drain triggered both smooth fill loss tween and trailing ghost tween
+PASS: Kill count dynamically updated in plaque: 'KILLS: 7  |  LEVEL 1-1'
+PASS: blood_slash scaled to character proportions ((0.1, 0.1), ~50px width)
+PASS: guard_impact scaled to character proportions ((0.09, 0.09), ~46px width)
+PASS: parry_clash scaled to character proportions ((0.08, 0.08), ~50px width)
+PASS: riposte_slash scaled to character proportions ((0.12, 0.12), ~60px width)
+PASS: spawn_blood_splatter created 11 physics-enabled BloodDroplet instances with TileMap collision
+=== ALL TESTS COMPLETED SUCCESSFULLY ===

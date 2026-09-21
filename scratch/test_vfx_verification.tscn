@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://d4k8y1m7wax2b"]
+
+[ext_resource type="Script" path="res://scratch/test_vfx_verification.gd" id="1_vfx_test"]
+
+[node name="TestVfxVerification" type="Node"]
+script = ExtResource("1_vfx_test")

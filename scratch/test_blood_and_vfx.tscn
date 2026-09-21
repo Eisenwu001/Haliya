@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://ba8fd0q0ds4ck"]
+
+[ext_resource type="Script" path="res://scratch/test_blood_and_vfx.gd" id="1_bvfx_test"]
+
+[node name="TestBloodAndVfx" type="Node"]
+script = ExtResource("1_bvfx_test")
