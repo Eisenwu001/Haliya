@@ -25,7 +25,7 @@ const PARRIED_STAGGER_TEX = preload("res://assets/aswang/aswang_parried_stagger.
 const LEAP_ATTACK_TEX = preload("res://assets/aswang/aswang_leap_attack.png")
 
 const GRAVITY: float = 980.0
-const MAX_HEALTH: int = 20
+const MAX_HEALTH: int = 80
 
 # AI Tuning
 const SPEED_PHASE_1: float = 90.0
@@ -190,7 +190,7 @@ func _physics_process(delta: float) -> void:
 		if ghost_trail_timer <= 0.0:
 			ghost_trail_timer = 0.08
 			var trail_col = Color(0.9, 0.15, 0.15, 0.6) if current_phase == 2 else Color(0.4, 0.2, 0.6, 0.5)
-			VFX.spawn_ghost_trail(get_parent(), sprite.texture, sprite.global_position, sprite.scale, sprite.flip_h, trail_col)
+			VFX.spawn_ghost_trail(get_parent(), sprite.texture, sprite.global_position, sprite.scale, sprite.flip_h, trail_col, sprite.hframes, sprite.vframes, sprite.frame, sprite.offset)
 
 	update_ai(delta)
 	update_animation(delta)

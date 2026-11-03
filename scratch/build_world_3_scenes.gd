@@ -33,8 +33,8 @@ func _init() -> void:
 	# Wind shader material configured for stormy conditions (higher speed and sway)
 	var storm_wind_mat = ShaderMaterial.new()
 	storm_wind_mat.shader = WIND_SHADER
-	storm_wind_mat.set_shader_parameter("wind_speed", 2.6)
-	storm_wind_mat.set_shader_parameter("wind_strength", 6.2)
+	storm_wind_mat.set_shader_parameter("wind_speed", 2.0)
+	storm_wind_mat.set_shader_parameter("wind_strength", 2.6)
 	storm_wind_mat.set_shader_parameter("wind_detail", 2.5)
 
 	# 5 Level Configurations

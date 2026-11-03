@@ -1,0 +1,351 @@
+[gd_scene format=3]
+
+[ext_resource type="TileSet" path="res://scenes/cave/cave_tileset.tres" id="1_tileset"]
+[ext_resource type="Texture2D" path="res://assets/cave_platformer/cave_platforms.png" id="2_plat"]
+[ext_resource type="Script" path="res://scripts/cave_crumble_ledge.gd" id="4_crumble"]
+[ext_resource type="Script" path="res://scripts/cave_spike_hazard.gd" id="6_spike"]
+[ext_resource type="Script" uid="uid://b6v2malf4os04" path="res://scripts/aswang.gd" id="9_aswang"]
+[ext_resource type="Script" path="res://scripts/skeleton.gd" id="10_skeleton"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_160x14"]
+size = Vector2(160.0, 14.0)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_112x16"]
+size = Vector2(112.0, 16.0)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_192x18"]
+size = Vector2(192.0, 18.0)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_160x18"]
+size = Vector2(160.0, 18.0)
+
+[node name="Level4_2" type="Node2D"]
+
+[node name="BaseGround" type="TileMapLayer" parent="."]
+tile_map_data = PackedByteArray("AAAAAAkAAAAAAAYAAAABAAkAAAABAAYAAAACAAkAAAABAAYAAAADAAkAAAABAAYAAAAEAAkAAAABAAYAAAAFAAkAAAABAAYAAAAGAAkAAAABAAYAAAAHAAkAAAABAAYAAAAIAAkAAAABAAYAAAAJAAkAAAABAAYAAAAKAAkAAAABAAYAAAALAAkAAAABAAYAAAAMAAkAAAABAAYAAAANAAkAAAABAAYAAAAOAAkAAAABAAYAAAAPAAkAAAABAAYAAAAQAAkAAAABAAYAAAARAAkAAAABAAYAAAASAAkAAAABAAYAAAATAAkAAAABAAYAAAAUAAkAAAABAAYAAAAVAAkAAAABAAYAAAAWAAkAAAABAAYAAAAXAAkAAAABAAYAAAAYAAkAAAABAAYAAAAZAAkAAAABAAYAAAAaAAkAAAABAAYAAAAbAAkAAAABAAYAAAAcAAkAAAABAAYAAAAdAAkAAAABAAYAAAAeAAkAAAACAAYAAAAlAAkAAAAAAAAAAAAmAAkAAAABAAAAAAAnAAkAAAABAAAAAAAoAAkAAAABAAAAAAApAAkAAAABAAAAAAAqAAkAAAABAAAAAAArAAkAAAABAAAAAAAsAAkAAAABAAAAAAAtAAkAAAABAAAAAAAuAAkAAAABAAAAAAAvAAkAAAABAAAAAAAwAAkAAAABAAAAAAAxAAkAAAABAAAAAAAyAAkAAAABAAAAAAAzAAkAAAABAAAAAAA0AAkAAAABAAAAAAA1AAkAAAABAAAAAAA2AAkAAAABAAAAAAA3AAkAAAABAAAAAAA4AAkAAAABAAAAAAA5AAkAAAABAAAAAAA6AAkAAAACAAAAAABCAAkAAAAAAAYAAABDAAkAAAABAAYAAABEAAkAAAABAAYAAABFAAkAAAABAAYAAABGAAkAAAABAAYAAABHAAkAAAABAAYAAABIAAkAAAABAAYAAABJAAkAAAABAAYAAABKAAkAAAABAAYAAABLAAkAAAABAAYAAABMAAkAAAABAAYAAABNAAkAAAABAAYAAABOAAkAAAABAAYAAABPAAkAAAABAAYAAABQAAkAAAABAAYAAABRAAkAAAABAAYAAABSAAkAAAABAAYAAABTAAkAAAABAAYAAABUAAkAAAABAAYAAABVAAkAAAABAAYAAABWAAkAAAABAAYAAABXAAkAAAABAAYAAABYAAkAAAACAAYAAABgAAkAAAAAAAYAAABhAAkAAAABAAYAAABiAAkAAAABAAYAAABjAAkAAAABAAYAAABkAAkAAAABAAYAAABlAAkAAAABAAYAAABmAAkAAAABAAYAAABnAAkAAAABAAYAAABoAAkAAAABAAYAAABpAAkAAAABAAYAAABqAAkAAAABAAYAAABrAAkAAAABAAYAAABsAAkAAAABAAYAAABtAAkAAAABAAYAAABuAAkAAAABAAYAAABvAAkAAAABAAYAAABwAAkAAAABAAYAAABxAAkAAAABAAYAAAByAAkAAAABAAYAAABzAAkAAAABAAYAAAB0AAkAAAABAAYAAAB1AAkAAAABAAYAAAB2AAkAAAABAAYAAAB3AAkAAAABAAYAAAB4AAkAAAABAAYAAAB5AAkAAAABAAYAAAB6AAkAAAABAAYAAAB7AAkAAAABAAYAAAB8AAkAAAABAAYAAAB9AAkAAAABAAYAAAB+AAkAAAABAAYAAAB/AAkAAAABAAYAAACAAAkAAAABAAYAAACBAAkAAAABAAYAAACCAAkAAAABAAYAAACDAAkAAAABAAYAAACEAAkAAAABAAYAAACFAAkAAAABAAYAAACGAAkAAAABAAYAAACHAAkAAAABAAYAAACIAAkAAAABAAYAAACJAAkAAAABAAYAAACKAAkAAAABAAYAAACLAAkAAAABAAYAAACMAAkAAAABAAYAAACNAAkAAAABAAYAAACOAAkAAAABAAYAAACPAAkAAAABAAYAAACQAAkAAAABAAYAAACRAAkAAAABAAYAAACSAAkAAAABAAYAAACTAAkAAAABAAYAAACUAAkAAAABAAYAAACVAAkAAAABAAYAAACWAAkAAAABAAYAAACXAAkAAAABAAYAAACYAAkAAAABAAYAAACZAAkAAAABAAYAAACaAAkAAAABAAYAAACbAAkAAAABAAYAAACcAAkAAAABAAYAAACdAAkAAAABAAYAAACeAAkAAAABAAYAAACfAAkAAAABAAYAAACgAAkAAAACAAYAAAAAAAoAAAAAAAcAAAABAAoAAAABAAcAAAACAAoAAAABAAcAAAADAAoAAAABAAcAAAAEAAoAAAABAAcAAAAFAAoAAAABAAcAAAAGAAoAAAABAAcAAAAHAAoAAAABAAcAAAAIAAoAAAABAAcAAAAJAAoAAAABAAcAAAAKAAoAAAABAAcAAAALAAoAAAABAAcAAAAMAAoAAAABAAcAAAANAAoAAAABAAcAAAAOAAoAAAABAAcAAAAPAAoAAAABAAcAAAAQAAoAAAABAAcAAAARAAoAAAABAAcAAAASAAoAAAABAAcAAAATAAoAAAABAAcAAAAUAAoAAAABAAcAAAAVAAoAAAABAAcAAAAWAAoAAAABAAcAAAAXAAoAAAABAAcAAAAYAAoAAAABAAcAAAAZAAoAAAABAAcAAAAaAAoAAAABAAcAAAAbAAoAAAABAAcAAAAcAAoAAAABAAcAAAAdAAoAAAABAAcAAAAeAAoAAAACAAcAAAAlAAoAAAAAAAEAAAAmAAoAAAABAAEAAAAnAAoAAAABAAEAAAAoAAoAAAABAAEAAAApAAoAAAABAAEAAAAqAAoAAAABAAEAAAArAAoAAAABAAEAAAAsAAoAAAABAAEAAAAtAAoAAAABAAEAAAAuAAoAAAABAAEAAAAvAAoAAAABAAEAAAAwAAoAAAABAAEAAAAxAAoAAAABAAEAAAAyAAoAAAABAAEAAAAzAAoAAAABAAEAAAA0AAoAAAABAAEAAAA1AAoAAAABAAEAAAA2AAoAAAABAAEAAAA3AAoAAAABAAEAAAA4AAoAAAABAAEAAAA5AAoAAAABAAEAAAA6AAoAAAACAAEAAABCAAoAAAAAAAcAAABDAAoAAAABAAcAAABEAAoAAAABAAcAAABFAAoAAAABAAcAAABGAAoAAAABAAcAAABHAAoAAAABAAcAAABIAAoAAAABAAcAAABJAAoAAAABAAcAAABKAAoAAAABAAcAAABLAAoAAAABAAcAAABMAAoAAAABAAcAAABNAAoAAAABAAcAAABOAAoAAAABAAcAAABPAAoAAAABAAcAAABQAAoAAAABAAcAAABRAAoAAAABAAcAAABSAAoAAAABAAcAAABTAAoAAAABAAcAAABUAAoAAAABAAcAAABVAAoAAAABAAcAAABWAAoAAAABAAcAAABXAAoAAAABAAcAAABYAAoAAAACAAcAAABgAAoAAAAAAAcAAABhAAoAAAABAAcAAABiAAoAAAABAAcAAABjAAoAAAABAAcAAABkAAoAAAABAAcAAABlAAoAAAABAAcAAABmAAoAAAABAAcAAABnAAoAAAABAAcAAABoAAoAAAABAAcAAABpAAoAAAABAAcAAABqAAoAAAABAAcAAABrAAoAAAABAAcAAABsAAoAAAABAAcAAABtAAoAAAABAAcAAABuAAoAAAABAAcAAABvAAoAAAABAAcAAABwAAoAAAABAAcAAABxAAoAAAABAAcAAAByAAoAAAABAAcAAABzAAoAAAABAAcAAAB0AAoAAAABAAcAAAB1AAoAAAABAAcAAAB2AAoAAAABAAcAAAB3AAoAAAABAAcAAAB4AAoAAAABAAcAAAB5AAoAAAABAAcAAAB6AAoAAAABAAcAAAB7AAoAAAABAAcAAAB8AAoAAAABAAcAAAB9AAoAAAABAAcAAAB+AAoAAAABAAcAAAB/AAoAAAABAAcAAACAAAoAAAABAAcAAACBAAoAAAABAAcAAACCAAoAAAABAAcAAACDAAoAAAABAAcAAACEAAoAAAABAAcAAACFAAoAAAABAAcAAACGAAoAAAABAAcAAACHAAoAAAABAAcAAACIAAoAAAABAAcAAACJAAoAAAABAAcAAACKAAoAAAABAAcAAACLAAoAAAABAAcAAACMAAoAAAABAAcAAACNAAoAAAABAAcAAACOAAoAAAABAAcAAACPAAoAAAABAAcAAACQAAoAAAABAAcAAACRAAoAAAABAAcAAACSAAoAAAABAAcAAACTAAoAAAABAAcAAACUAAoAAAABAAcAAACVAAoAAAABAAcAAACWAAoAAAABAAcAAACXAAoAAAABAAcAAACYAAoAAAABAAcAAACZAAoAAAABAAcAAACaAAoAAAABAAcAAACbAAoAAAABAAcAAACcAAoAAAABAAcAAACdAAoAAAABAAcAAACeAAoAAAABAAcAAACfAAoAAAABAAcAAACgAAoAAAACAAcAAAAAAAsAAAAAAAcAAAABAAsAAAABAAcAAAACAAsAAAABAAcAAAADAAsAAAABAAcAAAAEAAsAAAABAAcAAAAFAAsAAAABAAcAAAAGAAsAAAABAAcAAAAHAAsAAAABAAcAAAAIAAsAAAABAAcAAAAJAAsAAAABAAcAAAAKAAsAAAABAAcAAAALAAsAAAABAAcAAAAMAAsAAAABAAcAAAANAAsAAAABAAcAAAAOAAsAAAABAAcAAAAPAAsAAAABAAcAAAAQAAsAAAABAAcAAAARAAsAAAABAAcAAAASAAsAAAABAAcAAAATAAsAAAABAAcAAAAUAAsAAAABAAcAAAAVAAsAAAABAAcAAAAWAAsAAAABAAcAAAAXAAsAAAABAAcAAAAYAAsAAAABAAcAAAAZAAsAAAABAAcAAAAaAAsAAAABAAcAAAAbAAsAAAABAAcAAAAcAAsAAAABAAcAAAAdAAsAAAABAAcAAAAeAAsAAAACAAcAAAAfAAsAAAABAAcAAAAgAAsAAAABAAcAAAAhAAsAAAABAAcAAAAiAAsAAAABAAcAAAAjAAsAAAABAAcAAAAkAAsAAAABAAcAAAAlAAsAAAAAAAEAAAAmAAsAAAABAAEAAAAnAAsAAAABAAEAAAAoAAsAAAABAAEAAAApAAsAAAABAAEAAAAqAAsAAAABAAEAAAArAAsAAAABAAEAAAAsAAsAAAABAAEAAAAtAAsAAAABAAEAAAAuAAsAAAABAAEAAAAvAAsAAAABAAEAAAAwAAsAAAABAAEAAAAxAAsAAAABAAEAAAAyAAsAAAABAAEAAAAzAAsAAAABAAEAAAA0AAsAAAABAAEAAAA1AAsAAAABAAEAAAA2AAsAAAABAAEAAAA3AAsAAAABAAEAAAA4AAsAAAABAAEAAAA5AAsAAAABAAEAAAA6AAsAAAACAAEAAAA7AAsAAAABAAcAAAA8AAsAAAABAAcAAAA9AAsAAAABAAcAAAA+AAsAAAABAAcAAAA/AAsAAAABAAcAAABAAAsAAAABAAcAAABBAAsAAAABAAcAAABCAAsAAAAAAAcAAABDAAsAAAABAAcAAABEAAsAAAABAAcAAABFAAsAAAABAAcAAABGAAsAAAABAAcAAABHAAsAAAABAAcAAABIAAsAAAABAAcAAABJAAsAAAABAAcAAABKAAsAAAABAAcAAABLAAsAAAABAAcAAABMAAsAAAABAAcAAABNAAsAAAABAAcAAABOAAsAAAABAAcAAABPAAsAAAABAAcAAABQAAsAAAABAAcAAABRAAsAAAABAAcAAABSAAsAAAABAAcAAABTAAsAAAABAAcAAABUAAsAAAABAAcAAABVAAsAAAABAAcAAABWAAsAAAABAAcAAABXAAsAAAABAAcAAABYAAsAAAACAAcAAABZAAsAAAABAAcAAABaAAsAAAABAAcAAABbAAsAAAABAAcAAABcAAsAAAABAAcAAABdAAsAAAABAAcAAABeAAsAAAABAAcAAABfAAsAAAABAAcAAABgAAsAAAAAAAcAAABhAAsAAAABAAcAAABiAAsAAAABAAcAAABjAAsAAAABAAcAAABkAAsAAAABAAcAAABlAAsAAAABAAcAAABmAAsAAAABAAcAAABnAAsAAAABAAcAAABoAAsAAAABAAcAAABpAAsAAAABAAcAAABqAAsAAAABAAcAAABrAAsAAAABAAcAAABsAAsAAAABAAcAAABtAAsAAAABAAcAAABuAAsAAAABAAcAAABvAAsAAAABAAcAAABwAAsAAAABAAcAAABxAAsAAAABAAcAAAByAAsAAAABAAcAAABzAAsAAAABAAcAAAB0AAsAAAABAAcAAAB1AAsAAAABAAcAAAB2AAsAAAABAAcAAAB3AAsAAAABAAcAAAB4AAsAAAABAAcAAAB5AAsAAAABAAcAAAB6AAsAAAABAAcAAAB7AAsAAAABAAcAAAB8AAsAAAABAAcAAAB9AAsAAAABAAcAAAB+AAsAAAABAAcAAAB/AAsAAAABAAcAAACAAAsAAAABAAcAAACBAAsAAAABAAcAAACCAAsAAAABAAcAAACDAAsAAAABAAcAAACEAAsAAAABAAcAAACFAAsAAAABAAcAAACGAAsAAAABAAcAAACHAAsAAAABAAcAAACIAAsAAAABAAcAAACJAAsAAAABAAcAAACKAAsAAAABAAcAAACLAAsAAAABAAcAAACMAAsAAAABAAcAAACNAAsAAAABAAcAAACOAAsAAAABAAcAAACPAAsAAAABAAcAAACQAAsAAAABAAcAAACRAAsAAAABAAcAAACSAAsAAAABAAcAAACTAAsAAAABAAcAAACUAAsAAAABAAcAAACVAAsAAAABAAcAAACWAAsAAAABAAcAAACXAAsAAAABAAcAAACYAAsAAAABAAcAAACZAAsAAAABAAcAAACaAAsAAAABAAcAAACbAAsAAAABAAcAAACcAAsAAAABAAcAAACdAAsAAAABAAcAAACeAAsAAAABAAcAAACfAAsAAAABAAcAAACgAAsAAAACAAcAAAA=")
+tile_set = ExtResource("1_tileset")
+
+[node name="ElevatedPlatforms" type="Node2D" parent="."]
+
+[node name="CavePlatform_1" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1072.0, 240.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_1"]
+position = Vector2(0, 7.0)
+shape = SubResource("RectangleShape2D_160x14")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_1"]
+position = Vector2(0, 22.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(224, 64, 160, 44)
+
+[node name="CavePlatform_2" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1160.0, 215.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_2"]
+position = Vector2(0, 8.0)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_2"]
+position = Vector2(0, 24.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_3" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1450.0, 205.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_3"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_3"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_4" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1720.0, 180.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_4"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_160x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_4"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 0, 160, 56)
+
+[node name="CavePlatform_5" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1984.0, 235.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_5"]
+position = Vector2(0, 7.0)
+shape = SubResource("RectangleShape2D_160x14")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_5"]
+position = Vector2(0, 22.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(224, 64, 160, 44)
+
+[node name="CavePlatform_6" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1950.0, 140.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_6"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_6"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_7" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(2320.0, 220.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_7"]
+position = Vector2(0, 8.0)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_7"]
+position = Vector2(0, 24.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_8" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(2600.0, 195.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_8"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_8"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_9" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(2944.0, 235.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_9"]
+position = Vector2(0, 7.0)
+shape = SubResource("RectangleShape2D_160x14")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_9"]
+position = Vector2(0, 22.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(224, 64, 160, 44)
+
+[node name="CavePlatform_10" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(3020.0, 205.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_10"]
+position = Vector2(0, 8.0)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_10"]
+position = Vector2(0, 24.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_11" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(3360.0, 205.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_11"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_11"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_12" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(3850.0, 215.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_12"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_160x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_12"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 0, 160, 56)
+
+[node name="CavePlatform_13" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(4200.0, 220.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_13"]
+position = Vector2(0, 7.0)
+shape = SubResource("RectangleShape2D_160x14")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_13"]
+position = Vector2(0, 22.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(224, 64, 160, 44)
+
+[node name="CavePlatform_14" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(4560.0, 205.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_14"]
+position = Vector2(0, 9.0)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_14"]
+position = Vector2(0, 28.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_15" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(4850.0, 215.0)
+collision_layer = 1
+collision_mask = 1
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_15"]
+position = Vector2(0, 8.0)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_15"]
+position = Vector2(0, 24.0)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CrumbleLedge_1" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(964.0, 210.0)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_2" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1524.0, 195.0)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_3" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(1864.0, 210.0)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_4" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(2404.0, 200.0)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_5" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(2824.0, 210.0)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_6" type="StaticBody2D" parent="ElevatedPlatforms"]
+position = Vector2(3444.0, 195.0)
+script = ExtResource("4_crumble")
+
+[node name="SpikeHazards" type="Node2D" parent="."]
+
+[node name="SpikeBed_1" type="Area2D" parent="SpikeHazards"]
+position = Vector2(960.0, 320.0)
+script = ExtResource("6_spike")
+hazard_width = 224.0
+
+[node name="SpikeBed_2" type="Area2D" parent="SpikeHazards"]
+position = Vector2(1856.0, 320.0)
+script = ExtResource("6_spike")
+hazard_width = 256.0
+
+[node name="SpikeBed_3" type="Area2D" parent="SpikeHazards"]
+position = Vector2(2816.0, 320.0)
+script = ExtResource("6_spike")
+hazard_width = 256.0
+
+[node name="Enemies" type="Node2D" parent="."]
+
+[node name="RuinsSentry_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(520.0, 255.0)
+script = ExtResource("10_skeleton")
+
+[node name="RuinsStalker_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(820.0, 260.0)
+script = ExtResource("9_aswang")
+
+[node name="PlazaSentry_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(1380.0, 255.0)
+script = ExtResource("10_skeleton")
+
+[node name="PlazaBrute_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(1750.0, 260.0)
+script = ExtResource("9_aswang")
+
+[node name="PromenadeGuard_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(2340.0, 255.0)
+script = ExtResource("10_skeleton")
+
+[node name="PromenadeStalker_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(2700.0, 260.0)
+script = ExtResource("9_aswang")
+
+[node name="BastionSentry_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(3350.0, 255.0)
+script = ExtResource("10_skeleton")
+
+[node name="ShrineGuardian_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(3880.0, 260.0)
+script = ExtResource("9_aswang")
+
+[node name="InnerGuard_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(4420.0, 255.0)
+script = ExtResource("10_skeleton")
+
+[node name="GateWatcher_1" type="CharacterBody2D" parent="Enemies"]
+position = Vector2(4800.0, 260.0)
+script = ExtResource("9_aswang")

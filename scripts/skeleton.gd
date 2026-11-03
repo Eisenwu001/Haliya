@@ -19,11 +19,28 @@ const PATROL_SPEED: float = 28.0
 const CHASE_SPEED: float = 68.0
 const AGGRO_RANGE: float = 220.0
 const ATTACK_RANGE: float = 46.0
-const MAX_HEALTH: int = 4
+const MAX_HEALTH: int = 8
 const EnemyHealthPipsClass = preload("res://scripts/enemy_health_pips.gd")
 
 var current_state: State = State.IDLE
 var health: int = MAX_HEALTH
+var max_health: int = MAX_HEALTH
+var is_elite: bool = false
+var speed_multiplier: float = 1.0
+
+func apply_difficulty_scaling(hp_mult: float, spd_mult: float, elite: bool = false) -> void:
+	is_elite = elite
+	speed_multiplier = spd_mult
+	if is_elite:
+		max_health = int(round(MAX_HEALTH * hp_mult * 1.5))
+		speed_multiplier *= 1.20
+		if is_instance_valid(sprite):
+			sprite.modulate = Color(1.35, 0.45, 0.85, 1.0)
+	else:
+		max_health = int(round(MAX_HEALTH * hp_mult))
+	health = max_health
+	if is_instance_valid(health_pips):
+		health_pips.update_health(health, max_health)
 var is_facing_left: bool = false
 var is_dead: bool = false
 
@@ -57,6 +74,7 @@ var col_shape: CollisionShape2D
 var health_pips: Node2D
 
 func _ready() -> void:
+	z_index = 4
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_to_group("enemies")
 	add_to_group("skeleton")
@@ -159,6 +177,12 @@ func _physics_process(delta: float) -> void:
 	if is_dead:
 		return
 	
+	# Void / pit fall death check
+	if global_position.y > 360.0 or position.y > 360.0:
+		health = 0
+		shatter_death(1.0)
+		return
+
 	# Gravity
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
@@ -189,7 +213,7 @@ func _physics_process(delta: float) -> void:
 				set_state(State.PATROL)
 		
 		State.PATROL:
-			velocity.x = patrol_direction * PATROL_SPEED
+			velocity.x = patrol_direction * (PATROL_SPEED * speed_multiplier)
 			is_facing_left = (patrol_direction < 0.0)
 			
 			# Check distance from origin or wall contact
@@ -217,7 +241,7 @@ func _physics_process(delta: float) -> void:
 			elif dist > AGGRO_RANGE * 1.3:
 				set_state(State.IDLE)
 			else:
-				velocity.x = dir_to_player * CHASE_SPEED
+				velocity.x = dir_to_player * (CHASE_SPEED * speed_multiplier)
 		
 		State.ATTACK:
 			velocity.x = move_toward(velocity.x, 0.0, 400.0 * delta)
@@ -258,6 +282,8 @@ func set_state(new_state: State) -> void:
 	current_state = new_state
 	cur_frame_idx = 0
 	anim_timer = 0.0
+	if sprite:
+		sprite.position.y = -59.0
 	
 	match new_state:
 		State.IDLE:
@@ -293,6 +319,16 @@ func update_animation(delta: float) -> void:
 	sprite.flip_h = is_facing_left
 	
 	match current_state:
+		State.IDLE:
+			anim_timer += delta
+			# Sinister undead ribcage rise & fall / stance shift
+			var breath_cycle = sin(anim_timer * 3.4)
+			sprite.position.y = -59.0 + breath_cycle * 0.8
+			if state_timer < 0.45 and guard_tex:
+				sprite.texture = guard_tex
+			elif idle_tex:
+				sprite.texture = idle_tex
+		
 		State.PATROL, State.CHASE:
 			anim_timer += delta
 			var dur = 0.10 if current_state == State.CHASE else 0.13
@@ -352,14 +388,14 @@ func take_damage(amount: int, knockback_dir: float) -> void:
 			stun_stars.visible = false
 		health = 0
 		if is_instance_valid(health_pips):
-			health_pips.update_health(0, MAX_HEALTH, false)
+			health_pips.update_health(0, max_health, false)
 		VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -50.0), "CRIT 99!", Color(1.0, 0.9, 0.2), 16, true)
 		shatter_death(knockback_dir)
 		return
 	
 	health -= amount
 	if is_instance_valid(health_pips):
-		health_pips.update_health(health, MAX_HEALTH, false)
+		health_pips.update_health(health, max_health, false)
 	VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -42.0), str(amount), Color(1.0, 0.35, 0.25), 14, false)
 	
 	hurt_flash_timer = 0.22
@@ -377,6 +413,8 @@ func shatter_death(knock_dir: float) -> void:
 	if is_dead:
 		return
 	is_dead = true
+	if is_elite:
+		VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -60.0), "ELITE SLAIN", Color(1.0, 0.85, 0.35), 14, true)
 	current_state = State.DEATH
 	
 	if is_instance_valid(col_shape):
@@ -391,25 +429,27 @@ func shatter_death(knock_dir: float) -> void:
 	skeleton_died.emit(self)
 	
 	# Spawn bursting bone debris pieces
-	for tex in debris_textures:
-		var bone_spr := Sprite2D.new()
-		bone_spr.texture = tex
-		bone_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		bone_spr.scale = Vector2(0.5, 0.5)
-		bone_spr.global_position = global_position + Vector2(randf_range(-10, 10), randf_range(-40, -10))
-		get_parent().add_child(bone_spr)
-		
-		# Animate physics scatter & fade
-		var target_x = bone_spr.global_position.x + randf_range(30, 90) * knock_dir + randf_range(-20, 20)
-		var target_y = bone_spr.global_position.y + randf_range(10, 40)
-		var rot_target = randf_range(-6.0, 6.0)
-		
-		var tween = create_tween()
-		tween.parallel().tween_property(bone_spr, "global_position:x", target_x, 0.65).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(bone_spr, "global_position:y", target_y, 0.65).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
-		tween.parallel().tween_property(bone_spr, "rotation", rot_target, 0.65)
-		tween.tween_property(bone_spr, "modulate:a", 0.0, 0.5)
-		tween.tween_callback(bone_spr.queue_free)
+	if get_parent():
+		for tex in debris_textures:
+			var bone_spr := Sprite2D.new()
+			bone_spr.texture = tex
+			bone_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			bone_spr.scale = Vector2(0.5, 0.5)
+			bone_spr.global_position = global_position + Vector2(randf_range(-10, 10), randf_range(-40, -10))
+			get_parent().add_child(bone_spr)
+			
+			# Animate physics scatter & fade
+			var target_x = bone_spr.global_position.x + randf_range(30, 90) * knock_dir + randf_range(-20, 20)
+			var target_y = bone_spr.global_position.y + randf_range(10, 40)
+			var rot_target = randf_range(-6.0, 6.0)
+			
+			var tween = create_tween()
+			if tween:
+				tween.parallel().tween_property(bone_spr, "global_position:x", target_x, 0.65).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+				tween.parallel().tween_property(bone_spr, "global_position:y", target_y, 0.65).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+				tween.parallel().tween_property(bone_spr, "rotation", rot_target, 0.65)
+				tween.tween_property(bone_spr, "modulate:a", 0.0, 0.5)
+				tween.tween_callback(bone_spr.queue_free)
 	
 	if is_inside_tree():
 		get_tree().create_timer(1.2).timeout.connect(queue_free)
@@ -425,7 +465,8 @@ func deflect_by_parry(knock_dir: float) -> void:
 	if stun_stars:
 		stun_stars.visible = true
 	if is_instance_valid(health_pips):
-		health_pips.update_health(health, MAX_HEALTH, true)
+		health_pips.update_health(health, max_health, true)
 	VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -52.0), "STAGGERED!", Color(1.0, 0.85, 0.2), 14, true)
+	VFX.spawn_stagger_execution_prompt(get_parent(), global_position + Vector2(0, -70.0))
 	set_state(State.PARRIED_STAGGER)
 	velocity.x = knock_dir * 180.0

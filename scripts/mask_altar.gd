@@ -19,7 +19,7 @@ func _ready() -> void:
 	prompt_label.name = "PromptLabel"
 	prompt_label.position = Vector2(-80, -48)
 	prompt_label.size = Vector2(160, 20)
-	prompt_label.text = "✦ [E] Claim Mask of Sorrow ✦"
+	prompt_label.text = "[E] Claim Mask of Sorrow"
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_font_override("font", FONT_RES)
 	prompt_label.add_theme_font_size_override("font_size", 12)
@@ -75,7 +75,7 @@ func claim_mask() -> void:
 		{"speaker": "Haliya", "portrait": "haliya", "text": "(Internal) As if it's been waiting this whole time to finally have somewhere to put down what it's carrying."},
 		{"speaker": "Haliya", "portrait": "haliya", "text": "(Internal) This is what grief is supposed to feel like. Not gone. Held."},
 		{"speaker": "Kapre", "portrait": "kapre", "text": "Now you know what it costs. Remember that, out there. It only gets more expensive."},
-		{"speaker": "System", "portrait": "none", "text": "✦ Mask of Sorrow Claimed! The gateway to the Corrupted Overworld is now open. ✦"}
+		{"speaker": "System", "portrait": "none", "text": "Mask of Sorrow Claimed! The gateway to the Corrupted Overworld is now open."}
 	]
 	
 	dm.start_dialogue(lines, func():

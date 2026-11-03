@@ -48,7 +48,7 @@ func _init() -> void:
 
 	var menu_vbox = menu_scene.get_node_or_null("MenuVBox")
 	assert(menu_vbox != null, "MenuVBox must exist")
-	assert(menu_vbox.anchor_left == 0.5 and menu_vbox.anchor_right == 0.5, "MenuVBox must be centered horizontally")
+	assert(menu_vbox.anchor_left == 0.0 and menu_vbox.offset_left == 52.0, "MenuVBox must be left-anchored per Option A design")
 
 	# 5. Verify Modals Anchoring
 	print("\n5. Verifying Modals:")

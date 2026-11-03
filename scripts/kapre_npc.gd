@@ -17,7 +17,7 @@ func _ready() -> void:
 	prompt_label.name = "PromptLabel"
 	prompt_label.position = Vector2(-70, -75)
 	prompt_label.size = Vector2(140, 20)
-	prompt_label.text = "✦ [E] Speak to Kapre ✦"
+	prompt_label.text = "[E] Speak to Kapre"
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	prompt_label.add_theme_font_override("font", FONT_RES)
 	prompt_label.add_theme_font_size_override("font_size", 12)

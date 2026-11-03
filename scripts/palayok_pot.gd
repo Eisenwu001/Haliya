@@ -15,7 +15,7 @@ enum PotState {
 }
 
 @export_enum("Auto Random", "Intact (2 Hits)", "Cracked (1 Hit)") var initial_state: int = PotState.AUTO_RANDOM
-@export_enum("Health Dumpling (Default)", "Stamina Talisman", "Random Mix") var drop_type: int = 0
+@export_enum("Health Dot (Default)", "Stamina Talisman", "Random Mix") var drop_type: int = 0
 
 # ── Proportions & Ground Alignment ─────────────────────────────────────────────
 # 1024x1024 native frames scaled down to ~27-28px height matching character scale
@@ -145,7 +145,7 @@ func _handle_final_shatter(impact_dir: Vector2) -> void:
 	# Full terracotta clay shards particle burst
 	_spawn_particles(impact_dir, 16, 80.0, 160.0, 0.65, 2.0, 4.5)
 	
-	# Spawn reward pickup (70% Dumpling, 30% Talisman)
+	# Spawn reward pickup (70% Health Dot, 30% Talisman)
 	_spawn_pickup()
 	
 	# Display Frame 3 (Explosion) briefly
@@ -195,18 +195,31 @@ func _spawn_particles(impact_dir: Vector2, count: int, vel_min: float, vel_max: 
 	add_child(particles)
 
 func _spawn_pickup() -> void:
-	var pickup = PickupItemScript.new()
+	var parent_node := get_parent()
+	if not is_instance_valid(parent_node):
+		return
+	
+	var roll: float = randf()
+	var should_drop_health: bool = (roll < 0.25)
+	var should_drop_stamina: bool = (roll >= 0.25 and roll < 0.60)
 	match drop_type:
 		1:
-			pickup.pickup_type = PickupItem.Type.STAMINA_TALISMAN
-		2:
-			pickup.pickup_type = PickupItem.Type.HEALTH_DUMPLING if randf() < 0.70 else PickupItem.Type.STAMINA_TALISMAN
-		_:
-			pickup.pickup_type = PickupItem.Type.HEALTH_DUMPLING
-	pickup.global_position = global_position + Vector2(0.0, -12.0)
-	var parent_node := get_parent()
-	if is_instance_valid(parent_node):
-		parent_node.add_child(pickup)
+			should_drop_health = false
+			should_drop_stamina = (roll < 0.50)
+	
+	if should_drop_health:
+		# Rare single medicinal herbal salve (+1 HP)
+		var dot = PickupItemScript.new()
+		dot.pickup_type = PickupItem.Type.HEALTH_DOT
+		dot.global_position = global_position + Vector2(0.0, -12.0)
+		parent_node.add_child(dot)
+		dot.launch_scatter(Vector2(randf_range(-20.0, 20.0), 6.0))
+	elif should_drop_stamina:
+		var talisman = PickupItemScript.new()
+		talisman.pickup_type = PickupItem.Type.STAMINA_TALISMAN
+		talisman.global_position = global_position + Vector2(0.0, -12.0)
+		parent_node.add_child(talisman)
+		talisman.launch_scatter(Vector2(randf_range(-20.0, 20.0), 6.0))
 
 func _trigger_screen_shake(amount: float) -> void:
 	var tree := get_tree()

@@ -1,0 +1,57 @@
+Created At: 2026-10-27T08:00:22+08:00
+Completed At: 2026-10-27T08:00:22+08:00
+Showing lines 195-248 of 419
+195: 
+196: static func spawn_blood_splatter(parent: Node, pos: Vector2, dir: Vector2 = Vector2.ZERO, intensity: float = 1.0, is_player: bool = false) -> void:
+197: 	if not is_instance_valid(parent):
+198: 		return
+199: 
+200: 	var count = int(clamp(11 * intensity, 8, 24))
+201: 	var base_color = Color(0.92, 0.12, 0.16, 0.95) if is_player else Color(0.72, 0.04, 0.08, 0.95)
+202: 
+203: 	# 1. Quick airborne burst puff for instantaneous strike impact
+204: 	var p := CPUParticles2D.new()
+205: 	p.z_index = 26
+206: 	p.global_position = pos
+207: 	p.emitting = true
+208: 	p.one_shot = true
+209: 	p.explosiveness = 0.98
+210: 	p.amount = int(clamp(8 * intensity, 6, 16))
+211: 	p.lifetime = 0.22
+212: 	p.spread = 60.0
+213: 	p.direction = dir.normalized() if dir != Vector2.ZERO else Vector2(0, -1)
+214: 	p.gravity = Vector2(0, 400)
+215: 	p.initial_velocity_min = 70.0 * intensity
+216: 	p.initial_velocity_max = 160.0 * intensity
+217: 	p.scale_amount_min = 1.5
+218: 	p.scale_amount_max = 3.0
+219: 	p.color = base_color
+220: 	parent.add_child(p)
+221: 	if p.is_inside_tree():
+222: 		p.get_tree().create_timer(0.3, false, false, true).timeout.connect(func():
+223: 			if is_instance_valid(p):
+224: 				p.queue_free()
+225: 		)
+226: 	else:
+227: 		p.queue_free()
+228: 
+229: 	# 2. Physics droplets that fall and collide with the tilemap floor
+230: 	for i in range(count):
+231: 		var drop = BloodDroplet.new()
+232: 		drop.global_position = pos + Vector2(randf_range(-3, 3), randf_range(-3, 3))
+233: 		drop.blood_color = base_color.darkened(randf_range(0.0, 0.25))
+234: 		drop.drop_size = randf_range(1.2, 2.4)
+235: 		
+236: 		var angle: float
+237: 		if dir != Vector2.ZERO:
+238: 			angle = dir.angle() + randf_range(-0.75, 0.75)
+239: 		else:
+240: 			angle = randf_range(-PI * 0.85, -PI * 0.15)
+241: 		
+242: 		var speed = randf_range(70.0, 220.0) * clamp(intensity, 0.8, 1.5)
+243: 		drop.velocity = Vector2(cos(angle), sin(angle)) * speed
+244: 		drop.z_index = 25
+245: 		parent.add_child(drop)
+246: 
+247: 
+248: # ── Floating Combat Text (Damage & Status Alerts) ─────────────────────────────

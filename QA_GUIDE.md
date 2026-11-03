@@ -51,9 +51,11 @@ Use these built-in developer/QA hotkeys during gameplay to jump across levels or
 
 | Shortcut Key | Function |
 | :--- | :--- |
-| `1` or `Numpad 1` | **Jump directly to Forest** (Level 1-1: *Whispering Canopy*) |
-| `2` or `Numpad 2` | **Jump directly to Rice Field** (Level 2-1: *Emerald Terraces*) |
-| `3` or `Numpad 3` | **Jump directly to Rainy Forest** (Level 3-1: *Drenched Foothills*) |
+| `1` or `Numpad 1` | **Jump directly to Forest** (Level 1-1: *Whispering Canopy*, Index 0) |
+| `2` or `Numpad 2` | **Jump directly to Rice Field** (Level 2-1: *Emerald Terraces*, Index 3) |
+| `3` or `Numpad 3` | **Jump directly to Rainy Forest** (Level 3-1: *Drenched Foothills*, Index 8) |
+| `4` or `Numpad 4` | **Jump directly to Cave** (Level 4-1: *Bioluminescent Threshold*, Index 13) |
+| `5` or `Numpad 5` | **Jump directly to Final Boss** (Level 5: *The Moon Devourer*, Index 17) |
 | `N` or `PageDown` | **Skip to Next Level** |
 | `P` or `PageUp` | **Skip to Previous Level** |
 | `H` | **Toggle UI/HUD** (Hides HUD for clean visual inspections & screenshots) |
@@ -67,30 +69,46 @@ Use these built-in developer/QA hotkeys during gameplay to jump across levels or
 | :---: | :--- | :---: | :--- | :--- |
 | 0 | Forest | Level 1-1 | *Whispering Canopy* | `res://scenes/forest/level_1_1.tscn` |
 | 1 | Forest | Level 1-2 | *Ancient Balete Grove* | `res://scenes/forest/level_1_2.tscn` |
-| 2 | Forest | Level 1-3 | *Corrupted Sentry Ridge* | `res://scenes/forest/level_1_3.tscn` |
+| 2 | Forest | Level 1-3 | *Corrupted Sentry Ridge* (Miniboss: Forest Brute) | `res://scenes/forest/level_1_3.tscn` |
 | 3 | Rice Field | Level 2-1 | *Emerald Terraces* | `res://scenes/rice_field/level_2_1.tscn` |
 | 4 | Rice Field | Level 2-2 | *Stilt Farmstead* | `res://scenes/rice_field/level_2_2.tscn` |
 | 5 | Rice Field | Level 2-3 | *The Mayon Crossing* | `res://scenes/rice_field/level_2_3.tscn` |
-| 6 | Rainy Forest | Level 3-1 | *Drenched Foothills* | `res://scenes/rainy_forest/level_3_1.tscn` |
-| 7 | Rainy Forest | Level 3-2 | *Canopy Torrent* | `res://scenes/rainy_forest/level_3_2.tscn` |
-| 8 | Rainy Forest | Level 3-3 | *The Flooded Ravine* | `res://scenes/rainy_forest/level_3_3.tscn` |
-| 9 | Rainy Forest | Level 3-4 | *Moss-Veiled Ruins* | `res://scenes/rainy_forest/level_3_4.tscn` |
-| 10 | Rainy Forest | Level 3-5 | *Eye of the Tempest* (Boss) | `res://scenes/rainy_forest/level_3_5.tscn` |
+| 6 | Rice Field | Level 2-4 | *The Caldera Foothills* | `res://scenes/rice_field/level_2_4.tscn` |
+| 7 | Rice Field | Level 2-5 | *The Burning Kiln Village* (Miniboss: Mayon Vanguard) | `res://scenes/rice_field/level_2_5.tscn` |
+| 8 | Rainy Forest | Level 3-1 | *Drenched Foothills* | `res://scenes/rainy_forest/level_3_1.tscn` |
+| 9 | Rainy Forest | Level 3-2 | *Canopy Torrent* | `res://scenes/rainy_forest/level_3_2.tscn` |
+| 10 | Rainy Forest | Level 3-3 | *The Flooded Ravine* | `res://scenes/rainy_forest/level_3_3.tscn` |
+| 11 | Rainy Forest | Level 3-4 | *Moss-Veiled Ruins* | `res://scenes/rainy_forest/level_3_4.tscn` |
+| 12 | Rainy Forest | Level 3-5 | *Eye of the Tempest* (Boss: Aswang Matriarch) | `res://scenes/rainy_forest/level_3_5.tscn` |
+| 13 | Cave | Level 4-1 | *Bioluminescent Threshold* | `res://scenes/cave/level_4_1.tscn` |
+| 14 | Cave | Level 4-2 | *Echoing Stalactite Vault* | `res://scenes/cave/level_4_2.tscn` |
+| 15 | Cave | Level 4-3 | *Subterranean River* | `res://scenes/cave/level_4_3.tscn` |
+| 16 | Cave | Level 4-4 | *Sanctum Approach* (Miniboss: Abyssal Vanguard) | `res://scenes/cave/level_4_4.tscn` |
+| 17 | Cave Boss | Level 5 | *The Moon Devourer* (Boss: Bakunawa) | `res://scenes/cave/level_5.tscn` |
 
 ---
 
 ## 🤖 5. Running Automated Verification Scripts
 
-Automated QA suites are available under `res://scratch/` to verify core mechanics headlessly or via editor:
+Automated QA suites are available under `res://scratch/` and the project root to verify core mechanics headlessly or via editor:
 
+* **Full Level & Void-Fall Verification**:
+  - Run script: `godot --headless -s res://test_levels_and_void.gd`
+  - Validates all 18 levels (`Level 1-1` through `Level 5`), scene loading, enemy wiring, and abyssal void fall respawn mechanics.
+* **Miniboss Sprites, Movement & Parry Verification**:
+  - Run script: `godot --headless -s res://scratch/test_minibosses.gd`
+  - Validates Level 1-3 Forest Brute and Level 2-5 Mayon Vanguard 8x4 spritesheet grids, ground baseline ($Y=240$), 7-frame locomotion cycles, primary and secondary attack momentum, frontal shield mitigation, parry deflect stagger, and 2x riposte damage.
+* **Miniboss Arena Lockdown & Defeat Flow**:
+  - Run script: `godot --headless -s res://scratch/test_miniboss_arena_flow.gd`
+  - Validates physical rear barrier deployment at $X = 3980$ upon reaching $X \ge 4050$, encounter banner broadcast, and barrier disintegration upon miniboss victory.
 * **Full HUD & Damage Verification**:
-  - Run scene: `res://scratch/test_runner.tscn`
+  - Run script: `godot --headless -s res://scratch/test_runner.gd`
   - Validates HP bar tweens, stamina recharge, ghost bars, and kill counter labels.
 * **Stage 3 & Weather Hazards**:
-  - Run scene: `res://scratch/test_stage_3_details.tscn`
+  - Run script: `godot --headless -s res://scratch/test_stage_3_details.gd`
   - Validates lightning hazard timings, puddles, rain particle VFX.
 * **World Progression Flow**:
-  - Run scene: `res://scratch/test_world_progression.tscn`
+  - Run script: `godot --headless -s res://scratch/test_world_progression.gd`
   - Validates map transition triggers and level loading.
 
 ---

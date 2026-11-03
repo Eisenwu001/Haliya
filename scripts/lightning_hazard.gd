@@ -4,11 +4,15 @@ extends Node2D
 signal strike_occurred(position: Vector2, damage: int)
 
 const TELEGRAPH_DURATION: float = 1.2
-const STRIKE_DURATION: float = 0.26
+const STRIKE_DURATION: float = 0.28
 const BLAST_RADIUS: float = 54.0
+const DIRECT_HIT_RADIUS: float = 18.0
 const DAMAGE: int = 25
 
 const LIGHT_TEX = preload("res://assets/vfx/radial_light_falloff.png")
+const STRIKE_ANIM_TEX = preload("res://assets/vfx/vfx_lightning_strike.png")
+const SCORCH_TEX = preload("res://assets/vfx/vfx_lightning_scorch.png")
+const WARNING_TEX = preload("res://assets/vfx/vfx_lightning_warning.png")
 
 var target_position: Vector2 = Vector2.ZERO
 var telegraph_timer: float = 0.0
@@ -18,17 +22,28 @@ var is_striking: bool = false
 var has_hit: bool = false
 
 # Visual references: Telegraph
+var telegraph_warning_sprite: Sprite2D
 var telegraph_circle: Line2D
 var telegraph_beam: Line2D
 var telegraph_sparks: CPUParticles2D
+var telegraph_arcs: Array[Line2D] = []
+var telegraph_light: PointLight2D = null
+var arc_jitter_timer: float = 0.0
 
-# Strike visual references: Single sky bolt + BIG ground scatter of rays + impact debris & dust
+# Strike visual references: Impactful lightning sprite + Ground crater decal & lingering crackle
+var strike_sprite: Sprite2D
+var ground_scorch_sprite: Sprite2D
+var ground_crackle_sprite: Sprite2D
+
+# Compatibility Line2Ds (kept so existing property references and tests never break)
 var bolt_line: Line2D
 var bolt_core: Line2D
 var ground_scatter_lines: Array[Line2D] = []
 var ground_scatter_cores: Array[Line2D] = []
 var burst_ray_lines: Array[Line2D] = []
-var shockwave_ring: Line2D
+var scorch_line: Line2D
+
+# Particles and lighting
 var impact_flash_sprite: Sprite2D
 var debris_particles: CPUParticles2D
 var dust_particles: CPUParticles2D
@@ -36,7 +51,6 @@ var strike_sparks: CPUParticles2D
 var smoke_particles: CPUParticles2D
 var crater_embers: CPUParticles2D
 var canopy_leaves: CPUParticles2D
-var scorch_line: Line2D
 var strike_light: PointLight2D
 var audio_player: AudioStreamPlayer2D
 
@@ -51,43 +65,72 @@ func _ready() -> void:
 	telegraph_timer = TELEGRAPH_DURATION
 
 func setup_telegraph_visuals() -> void:
-	# Ground pulsing warning ring
+	var add_mat := CanvasItemMaterial.new()
+	add_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	add_mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+
+	# 2D Side-Scroller Platform Ledge Electric Hazard Telegraph
+	telegraph_warning_sprite = Sprite2D.new()
+	telegraph_warning_sprite.name = "TelegraphWarningSprite"
+	telegraph_warning_sprite.texture = WARNING_TEX
+	telegraph_warning_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	telegraph_warning_sprite.material = add_mat
+	telegraph_warning_sprite.centered = false
+	telegraph_warning_sprite.offset = Vector2(-256, -380) # Floor baseline at (0, 0), vertical column reaches sky
+	telegraph_warning_sprite.scale = Vector2(0.28, 0.40)
+	telegraph_warning_sprite.position = Vector2(0, 0)
+	telegraph_warning_sprite.z_index = 2
+	add_child(telegraph_warning_sprite)
+
+	# Subtle ground boundary guide ring (Hidden for seamless natural visuals)
 	telegraph_circle = Line2D.new()
-	telegraph_circle.width = 2.5
-	telegraph_circle.default_color = Color(0.4, 0.8, 1.0, 0.6)
+	telegraph_circle.width = 1.5
+	telegraph_circle.default_color = Color(0.3, 0.75, 1.0, 0.0)
+	telegraph_circle.material = add_mat
+	telegraph_circle.visible = false
 	var pts: PackedVector2Array = []
 	var segments: int = 28
 	for i in range(segments + 1):
 		var ang: float = float(i) / float(segments) * TAU
-		pts.append(Vector2(cos(ang) * BLAST_RADIUS, sin(ang) * (BLAST_RADIUS * 0.35)))
+		pts.append(Vector2(cos(ang) * BLAST_RADIUS, sin(ang) * (BLAST_RADIUS * 0.30)))
 	telegraph_circle.points = pts
 	add_child(telegraph_circle)
 
-	# Faint vertical guide beam from the sky
+	# Atmospheric vertical beacon column & ground danger illumination (Pure warning, NO lightning)
 	telegraph_beam = Line2D.new()
-	telegraph_beam.width = 1.5
-	telegraph_beam.default_color = Color(0.5, 0.85, 1.0, 0.25)
-	telegraph_beam.points = PackedVector2Array([Vector2(0, -480), Vector2(0, 0)])
+	telegraph_beam.visible = false
 	add_child(telegraph_beam)
 
-	# Ground crackle sparks
+	# Disabled electric arcs and static sparks during telegraph
 	telegraph_sparks = CPUParticles2D.new()
-	telegraph_sparks.amount = 18
-	telegraph_sparks.lifetime = 0.4
-	telegraph_sparks.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-	telegraph_sparks.emission_sphere_radius = 32.0
-	telegraph_sparks.direction = Vector2(0, -1)
-	telegraph_sparks.spread = 70.0
-	telegraph_sparks.gravity = Vector2(0, -30)
-	telegraph_sparks.initial_velocity_min = 25.0
-	telegraph_sparks.initial_velocity_max = 55.0
-	telegraph_sparks.scale_amount_min = 1.0
-	telegraph_sparks.scale_amount_max = 2.8
-	telegraph_sparks.color = Color(0.6, 0.9, 1.0, 0.8)
+	telegraph_sparks.emitting = false
+	telegraph_sparks.visible = false
 	add_child(telegraph_sparks)
 
+	# Ambient warning glow PointLight2D (Ionized azure to electric cyan)
+	telegraph_light = PointLight2D.new()
+	telegraph_light.texture = LIGHT_TEX
+	telegraph_light.texture_scale = 1.1
+	telegraph_light.color = Color(0.35, 0.85, 1.0, 0.95)
+	telegraph_light.energy = 0.8
+	telegraph_light.position = Vector2(0, -8)
+	add_child(telegraph_light)
+
+func _generate_telegraph_arcs(intensity: float) -> void:
+	for i in range(telegraph_arcs.size()):
+		var arc: Line2D = telegraph_arcs[i]
+		var pts: PackedVector2Array = []
+		var count: int = 7
+		var start_x = -BLAST_RADIUS * 0.85 if (i % 2 == 0) else BLAST_RADIUS * 0.85
+		var end_x = BLAST_RADIUS * 0.85 if (i % 2 == 0) else -BLAST_RADIUS * 0.85
+		for p in range(count):
+			var frac: float = float(p) / float(count - 1)
+			var px = lerp(start_x, end_x, frac)
+			var jitter_y = randf_range(-3.5, 1.5) * (1.0 + intensity * 1.5)
+			pts.append(Vector2(px, jitter_y))
+		arc.points = pts
+
 func setup_strike_visuals() -> void:
-	# Materials for brilliant luminescence against dark storm ambient lighting
 	unshaded_mat = CanvasItemMaterial.new()
 	unshaded_mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
 
@@ -95,7 +138,53 @@ func setup_strike_visuals() -> void:
 	additive_mat.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
 	additive_mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
 
-	# Ground scorch ring
+	# 1. Main High-Impact Lightning Strike Animated Sprite
+	strike_sprite = Sprite2D.new()
+	strike_sprite.name = "StrikeSprite"
+	strike_sprite.texture = STRIKE_ANIM_TEX
+	strike_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	strike_sprite.hframes = 6
+	strike_sprite.vframes = 1
+	strike_sprite.frame = 1
+	strike_sprite.centered = false
+	strike_sprite.offset = Vector2(-128, -536) # Places the ground impact contact point exactly at (0, 0)
+	strike_sprite.material = additive_mat
+	strike_sprite.z_index = 28
+	strike_sprite.visible = false
+	add_child(strike_sprite)
+
+	# 2. 2D Platformer Flat Ground Scorch Decal (Recessed crater embedded along floor tile surface)
+	ground_scorch_sprite = Sprite2D.new()
+	ground_scorch_sprite.name = "GroundScorchDecal"
+	ground_scorch_sprite.texture = SCORCH_TEX
+	ground_scorch_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ground_scorch_sprite.hframes = 5
+	ground_scorch_sprite.vframes = 1
+	ground_scorch_sprite.frame = 3 # Flat surface scorch with cyan fissures
+	ground_scorch_sprite.centered = false
+	ground_scorch_sprite.offset = Vector2(-128, -20) # Ground baseline flush at rim (0, 0), cracks bleed down into tile face
+	ground_scorch_sprite.scale = Vector2(0.50, 0.50)
+	ground_scorch_sprite.z_index = 1 # Embedded directly onto ground tile surface behind characters
+	ground_scorch_sprite.visible = false
+	add_child(ground_scorch_sprite)
+
+	# 3. Additive Residual Ground Crackle Arcs (Horizontal surface skimmers & impact burst)
+	ground_crackle_sprite = Sprite2D.new()
+	ground_crackle_sprite.name = "GroundCrackleArcs"
+	ground_crackle_sprite.texture = SCORCH_TEX
+	ground_crackle_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	ground_crackle_sprite.hframes = 5
+	ground_crackle_sprite.vframes = 1
+	ground_crackle_sprite.frame = 0 # Frame 0: High-energy Ground Impact Burst
+	ground_crackle_sprite.centered = false
+	ground_crackle_sprite.offset = Vector2(-128, -20)
+	ground_crackle_sprite.scale = Vector2(0.50, 0.50)
+	ground_crackle_sprite.material = additive_mat
+	ground_crackle_sprite.z_index = 29 # Aligned with strike lightning layer
+	ground_crackle_sprite.visible = false
+	add_child(ground_crackle_sprite)
+
+	# Compatibility Scorch Line (Kept for unit tests and fallback)
 	scorch_line = Line2D.new()
 	scorch_line.width = 3.2
 	scorch_line.default_color = Color(0.12, 0.14, 0.20, 0.0)
@@ -106,87 +195,37 @@ func setup_strike_visuals() -> void:
 	scorch_line.points = scorch_pts
 	add_child(scorch_line)
 
-	# Dynamic PointLight2D impact flash (broad, intense luminescence)
+	# Compatibility dummy lines
+	bolt_line = Line2D.new()
+	bolt_line.visible = false
+	add_child(bolt_line)
+
+	bolt_core = Line2D.new()
+	bolt_core.visible = false
+	add_child(bolt_core)
+
+	# Dynamic PointLight2D impact flash
 	strike_light = PointLight2D.new()
 	strike_light.name = "StrikePointLight"
 	strike_light.texture = LIGHT_TEX
-	strike_light.texture_scale = 1.45
+	strike_light.texture_scale = 1.85
 	strike_light.color = Color(0.72, 0.92, 1.0, 1.0)
 	strike_light.energy = 0.0
 	strike_light.position = Vector2(0, -14)
 	add_child(strike_light)
 
-	# Incandescent ground core flash (blazing white-hot point of contact)
+	# Incandescent ground core flash sprite
 	impact_flash_sprite = Sprite2D.new()
 	impact_flash_sprite.name = "ImpactFlashSprite"
 	impact_flash_sprite.texture = LIGHT_TEX
 	impact_flash_sprite.material = additive_mat
 	impact_flash_sprite.modulate = Color(0.9, 0.96, 1.0, 1.0)
-	impact_flash_sprite.scale = Vector2(0.85, 0.45)
+	impact_flash_sprite.scale = Vector2(1.1, 0.55)
 	impact_flash_sprite.position = Vector2(0, -6)
 	impact_flash_sprite.visible = false
 	add_child(impact_flash_sprite)
 
-	# Single-strand main bolt (Sky to ground): Electric cyan outer glow
-	bolt_line = Line2D.new()
-	bolt_line.width = 8.0
-	bolt_line.default_color = Color(0.25, 0.82, 1.0, 0.95)
-	bolt_line.material = additive_mat
-	bolt_line.visible = false
-	add_child(bolt_line)
-
-	# Single-strand main bolt: Pure white inner core
-	bolt_core = Line2D.new()
-	bolt_core.width = 3.4
-	bolt_core.default_color = Color(1.0, 1.0, 1.0, 1.0)
-	bolt_core.material = unshaded_mat
-	bolt_core.visible = false
-	add_child(bolt_core)
-
-	# 1. Big Scatter of 16 Jagged Electrical Discharge Rays
-	ground_scatter_lines.clear()
-	ground_scatter_cores.clear()
-	for i in range(16):
-		var s_line := Line2D.new()
-		s_line.width = 4.2
-		s_line.default_color = Color(0.28, 0.82, 1.0, 0.95)
-		s_line.material = additive_mat
-		s_line.visible = false
-		add_child(s_line)
-		ground_scatter_lines.append(s_line)
-
-		var s_core := Line2D.new()
-		s_core.width = 1.8
-		s_core.default_color = Color(1.0, 1.0, 1.0, 1.0)
-		s_core.material = unshaded_mat
-		s_core.visible = false
-		add_child(s_core)
-		ground_scatter_cores.append(s_core)
-
-	# 2. Big Scatter of 14 Radiant Needle Burst Rays (Star-burst energy spikes)
-	burst_ray_lines.clear()
-	var ray_grad := Gradient.new()
-	ray_grad.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
-	ray_grad.set_color(1, Color(0.22, 0.80, 1.0, 0.0))
-
-	for i in range(14):
-		var b_ray := Line2D.new()
-		b_ray.width = 3.5
-		b_ray.gradient = ray_grad
-		b_ray.material = additive_mat
-		b_ray.visible = false
-		add_child(b_ray)
-		burst_ray_lines.append(b_ray)
-
-	# 3. Expanding Electrical Shockwave Ring
-	shockwave_ring = Line2D.new()
-	shockwave_ring.width = 3.0
-	shockwave_ring.default_color = Color(0.40, 0.88, 1.0, 0.0)
-	shockwave_ring.material = additive_mat
-	shockwave_ring.visible = false
-	add_child(shockwave_ring)
-
-	# 4. Ground Debris: Earthen dirt & rock chunks blasting upward with heavy gravity
+	# Ground Debris: Earthen dirt & rock chunks blasting upward
 	debris_particles = CPUParticles2D.new()
 	debris_particles.name = "DebrisParticles"
 	debris_particles.emitting = false
@@ -206,7 +245,7 @@ func setup_strike_visuals() -> void:
 	debris_particles.color = Color(0.32, 0.24, 0.18, 1.0)
 	add_child(debris_particles)
 
-	# 5. Ground Dust: Soft billowing earthen dust puff at surface impact
+	# Ground Dust: Soft billowing earthen dust puff at surface impact
 	dust_particles = CPUParticles2D.new()
 	dust_particles.name = "DustParticles"
 	dust_particles.emitting = false
@@ -226,7 +265,7 @@ func setup_strike_visuals() -> void:
 	dust_particles.color = Color(0.42, 0.36, 0.30, 0.40)
 	add_child(dust_particles)
 
-	# 6. Impact electrical explosion sparks (blasting out with the rays)
+	# Impact electrical explosion sparks
 	strike_sparks = CPUParticles2D.new()
 	strike_sparks.name = "StrikeSparks"
 	strike_sparks.material = additive_mat
@@ -245,24 +284,26 @@ func setup_strike_visuals() -> void:
 	strike_sparks.color = Color(0.8, 0.95, 1.0, 1.0)
 	add_child(strike_sparks)
 
-	# 7. Residual electrical steam / smoke
+	# Residual electrical steam / smoldering smoke rising from crater
 	smoke_particles = CPUParticles2D.new()
 	smoke_particles.name = "SmokeParticles"
 	smoke_particles.emitting = false
-	smoke_particles.one_shot = true
-	smoke_particles.amount = 18
-	smoke_particles.lifetime = 1.2
-	smoke_particles.direction = Vector2(-0.3, -1.0)
-	smoke_particles.spread = 45.0
-	smoke_particles.gravity = Vector2(-20.0, -18.0)
-	smoke_particles.initial_velocity_min = 20.0
-	smoke_particles.initial_velocity_max = 55.0
-	smoke_particles.scale_amount_min = 2.5
-	smoke_particles.scale_amount_max = 5.5
-	smoke_particles.color = Color(0.65, 0.75, 0.88, 0.45)
+	smoke_particles.one_shot = false # Continuous gentle wisps while crater cools
+	smoke_particles.amount = 16
+	smoke_particles.lifetime = 1.4
+	smoke_particles.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
+	smoke_particles.emission_rect_extents = Vector2(24, 4)
+	smoke_particles.direction = Vector2(-0.25, -1.0)
+	smoke_particles.spread = 40.0
+	smoke_particles.gravity = Vector2(-15.0, -22.0)
+	smoke_particles.initial_velocity_min = 15.0
+	smoke_particles.initial_velocity_max = 35.0
+	smoke_particles.scale_amount_min = 3.0
+	smoke_particles.scale_amount_max = 6.0
+	smoke_particles.color = Color(0.65, 0.75, 0.88, 0.35)
 	add_child(smoke_particles)
 
-	# 8. Searing Crater Embers: crackling incandescent sparks cooling over 1.35s
+	# Searing Crater Embers: crackling incandescent sparks cooling on the ground
 	crater_embers = CPUParticles2D.new()
 	crater_embers.name = "CraterEmbers"
 	crater_embers.texture = load("res://assets/vfx/crater_ember.png")
@@ -270,20 +311,20 @@ func setup_strike_visuals() -> void:
 	crater_embers.emitting = false
 	crater_embers.one_shot = true
 	crater_embers.amount = 14
-	crater_embers.lifetime = 1.35
-	crater_embers.explosiveness = 0.85
+	crater_embers.lifetime = 1.6
+	crater_embers.explosiveness = 0.80
 	crater_embers.emission_shape = CPUParticles2D.EMISSION_SHAPE_RECTANGLE
 	crater_embers.emission_rect_extents = Vector2(22, 5)
 	crater_embers.direction = Vector2(0, -1)
 	crater_embers.spread = 75.0
-	crater_embers.gravity = Vector2(0, 160.0)
+	crater_embers.gravity = Vector2(0, 140.0)
 	crater_embers.initial_velocity_min = 20.0
 	crater_embers.initial_velocity_max = 65.0
 	crater_embers.scale_amount_min = 0.75
 	crater_embers.scale_amount_max = 1.4
 	add_child(crater_embers)
 
-	# 9. Falling Singed Canopy Leaves: shook loose from tree branches by concussive shockwave
+	# Singed Canopy Leaves
 	canopy_leaves = CPUParticles2D.new()
 	canopy_leaves.name = "CanopyLeaves"
 	canopy_leaves.texture = load("res://assets/vfx/singed_leaf.png")
@@ -306,26 +347,41 @@ func setup_strike_visuals() -> void:
 
 func setup_audio() -> void:
 	audio_player = AudioStreamPlayer2D.new()
+	audio_player.name = "StrikeAudioPlayer2D"
 	audio_player.max_distance = 1400.0
 	audio_player.bus = "Master"
-	var crit_sound = load("res://assets/audio/sfx/hit_critical.wav")
-	if crit_sound:
-		audio_player.stream = crit_sound
-		audio_player.pitch_scale = randf_range(0.36, 0.44)
-		audio_player.volume_db = 5.0
+	var strike_sound = load("res://assets/audio/sfx/lightning_strike.mp3")
+	if strike_sound:
+		audio_player.stream = strike_sound
+		audio_player.pitch_scale = randf_range(0.96, 1.04)
+		audio_player.volume_db = 3.5
+	else:
+		var crit_sound = load("res://assets/audio/sfx/hit_critical.wav")
+		if crit_sound:
+			audio_player.stream = crit_sound
+			audio_player.pitch_scale = randf_range(0.36, 0.44)
+			audio_player.volume_db = 5.0
 	add_child(audio_player)
 
 func _process(delta: float) -> void:
 	if not is_striking:
 		telegraph_timer -= delta
-		# Pulse telegraph circle and beam
-		var pulse: float = 0.5 + 0.5 * sin((TELEGRAPH_DURATION - telegraph_timer) * 20.0)
 		var t_ratio: float = 1.0 - clamp(telegraph_timer / TELEGRAPH_DURATION, 0.0, 1.0)
-		if telegraph_circle:
-			telegraph_circle.default_color.a = lerp(0.4, 1.0, t_ratio * pulse)
-			telegraph_circle.width = lerp(2.0, 4.0, t_ratio)
-		if telegraph_beam:
-			telegraph_beam.default_color.a = lerp(0.15, 0.7, t_ratio * pulse)
+		var pulse: float = 0.5 + 0.5 * sin((TELEGRAPH_DURATION - telegraph_timer) * (15.0 + t_ratio * 25.0))
+		
+		if telegraph_light:
+			# Shift from ethereal azure to intense electric cyan
+			var light_col = Color(lerp(0.20, 0.65, t_ratio), lerp(0.65, 0.95, t_ratio), 1.0, 1.0)
+			telegraph_light.color = light_col
+			telegraph_light.energy = lerp(0.6, 2.5, t_ratio * pulse)
+			telegraph_light.texture_scale = lerp(0.9, 1.4, t_ratio)
+
+		if telegraph_warning_sprite:
+			var base_s = Vector2(0.28, 0.40)
+			telegraph_warning_sprite.scale = base_s * (1.0 + 0.06 * pulse)
+			var w_alpha = lerp(0.40, 1.0, t_ratio * pulse)
+			var warn_col = Color(lerp(0.45, 0.85, t_ratio), lerp(0.80, 1.0, t_ratio), 1.0, w_alpha)
+			telegraph_warning_sprite.modulate = warn_col
 
 		if telegraph_timer <= 0.0:
 			trigger_strike()
@@ -333,180 +389,141 @@ func _process(delta: float) -> void:
 		cleanup_timer -= delta
 		if strike_timer > 0.0:
 			strike_timer -= delta
-			# High-voltage strobe flicker
 			var t_prog: float = 1.0 - clamp(strike_timer / STRIKE_DURATION, 0.0, 1.0)
-			var strobe: float = 1.0
-			if t_prog < 0.28:
-				strobe = randf_range(0.90, 1.0) # Initial blast
-			elif t_prog < 0.50:
-				strobe = randf_range(0.65, 0.85) # High-energy restrike
-			elif t_prog < 0.78:
-				strobe = randf_range(0.85, 1.0) # Peak discharge
+
+			var anim_frame: int = 1
+			if t_prog < 0.20:
+				anim_frame = 1
+			elif t_prog < 0.45:
+				anim_frame = 2
+			elif t_prog < 0.70:
+				anim_frame = 3
+			elif t_prog < 0.88:
+				anim_frame = 4
 			else:
-				strobe = clamp((1.0 - t_prog) / 0.22, 0.0, 1.0) # Fast decay
+				anim_frame = 5
 
-			if bolt_line:
-				bolt_line.default_color.a = strobe
-			if bolt_core:
-				bolt_core.default_color.a = strobe
+			if strike_sprite:
+				strike_sprite.frame = anim_frame
+				var strobe: float = 1.0
+				if t_prog < 0.28:
+					strobe = randf_range(0.92, 1.0)
+				elif t_prog < 0.50:
+					strobe = randf_range(0.70, 0.90)
+				elif t_prog < 0.78:
+					strobe = randf_range(0.85, 1.0)
+				else:
+					strobe = clamp((1.0 - t_prog) / 0.22, 0.0, 1.0)
+				strike_sprite.modulate.a = strobe
 
-			# Ground scatter rays fade during strike flash
-			var scatter_alpha: float = clamp(strike_timer / 0.22, 0.0, 1.0) * strobe
-			for g_line in ground_scatter_lines:
-				if is_instance_valid(g_line):
-					g_line.default_color.a = scatter_alpha * 0.95
-			for g_core in ground_scatter_cores:
-				if is_instance_valid(g_core):
-					g_core.default_color.a = scatter_alpha
-
-			# Radiant burst needle rays have a fast explosive pop
-			var burst_alpha: float = clamp(strike_timer / 0.18, 0.0, 1.0) * strobe
-			for b_ray in burst_ray_lines:
-				if is_instance_valid(b_ray):
-					b_ray.modulate.a = burst_alpha
-
-			# Expanding electrical shockwave ring
-			if shockwave_ring:
-				var wave_radius: float = lerp(12.0, 85.0, t_prog)
-				var wave_pts: PackedVector2Array = []
-				for i in range(25):
-					var a: float = float(i) / 24.0 * TAU
-					wave_pts.append(Vector2(cos(a) * wave_radius, sin(a) * (wave_radius * 0.35)))
-				shockwave_ring.points = wave_pts
-				shockwave_ring.default_color.a = clamp((1.0 - t_prog) * 1.2, 0.0, 0.90)
-
-			# Impact ground flash sprite
-			if impact_flash_sprite:
-				var flash_scale: float = lerp(0.95, 0.45, t_prog)
-				impact_flash_sprite.scale = Vector2(flash_scale * 1.2, flash_scale * 0.6)
-				impact_flash_sprite.modulate.a = scatter_alpha
+			if ground_crackle_sprite:
+				ground_crackle_sprite.frame = 0 if t_prog < 0.35 else 1
+				ground_crackle_sprite.position = Vector2(randf_range(-1.0, 1.0), 0.0)
+				ground_crackle_sprite.modulate.a = randf_range(0.85, 1.0)
 
 			if strike_light:
-				strike_light.energy = 6.0 * strobe
-			if scorch_line:
-				scorch_line.default_color.a = clamp(t_prog * 1.8, 0.0, 0.75)
-		else:
-			# Strike flash finished: hide lines and light, leave debris/dust particles to complete settle
-			if bolt_line and bolt_line.visible:
-				bolt_line.visible = false
-			if bolt_core and bolt_core.visible:
-				bolt_core.visible = false
-			for g_line in ground_scatter_lines:
-				if is_instance_valid(g_line):
-					g_line.visible = false
-			for g_core in ground_scatter_cores:
-				if is_instance_valid(g_core):
-					g_core.visible = false
-			for b_ray in burst_ray_lines:
-				if is_instance_valid(b_ray):
-					b_ray.visible = false
-			if shockwave_ring:
-				shockwave_ring.visible = false
+				strike_light.energy = 6.5 * (1.0 - t_prog * 0.5)
+
 			if impact_flash_sprite:
+				var flash_scale: float = lerp(1.2, 0.5, t_prog)
+				impact_flash_sprite.scale = Vector2(flash_scale * 1.2, flash_scale * 0.6)
+				impact_flash_sprite.modulate.a = clamp((1.0 - t_prog) * 1.5, 0.0, 1.0)
+		else:
+			# Strike flash finished: Hide main sky bolt and flash light
+			if strike_sprite and strike_sprite.visible:
+				strike_sprite.visible = false
+			if impact_flash_sprite and impact_flash_sprite.visible:
 				impact_flash_sprite.visible = false
 			if strike_light:
 				strike_light.energy = 0.0
 
+			var time_since_strike_end: float = (3.2 - STRIKE_DURATION) - cleanup_timer
+			
+			if time_since_strike_end < 0.40:
+				if ground_crackle_sprite:
+					ground_crackle_sprite.visible = true
+					ground_crackle_sprite.frame = 1
+					ground_crackle_sprite.position = Vector2(randf_range(-0.8, 0.8), 0.0)
+					ground_crackle_sprite.modulate.a = randf_range(0.65, 0.95)
+			elif time_since_strike_end < 0.85:
+				if ground_crackle_sprite:
+					ground_crackle_sprite.visible = true
+					ground_crackle_sprite.frame = 2
+					ground_crackle_sprite.position = Vector2(randf_range(-0.4, 0.4), 0.0)
+					ground_crackle_sprite.modulate.a = randf_range(0.35, 0.65)
+			else:
+				if ground_crackle_sprite and ground_crackle_sprite.visible:
+					ground_crackle_sprite.visible = false
+
+			if ground_scorch_sprite:
+				if time_since_strike_end < 0.45:
+					ground_scorch_sprite.frame = 2 # Cooling magma fissures & embers (Stage 1)
+				elif time_since_strike_end < 1.10:
+					ground_scorch_sprite.frame = 3 # Warm scorched charcoal crater (Stage 2)
+				else:
+					ground_scorch_sprite.frame = 4 # Permanent cooled carbon crater (Stage 3, zero air pixels)
+					ground_scorch_sprite.modulate = Color(1.0, 1.0, 1.0, 0.95)
+
+				if smoke_particles and cleanup_timer < 1.0:
+					smoke_particles.emitting = false
+
 			if cleanup_timer <= 0.0:
+				# ── PERMANENT GROUND STAIN PRESERVATION ──
+				# Detach the scorch decal and embed permanently into the parent level node
+				if is_instance_valid(ground_scorch_sprite):
+					var parent_node := get_parent()
+					if is_instance_valid(parent_node):
+						ground_scorch_sprite.frame = 4
+						ground_scorch_sprite.modulate = Color(0.85, 0.88, 0.92, 0.95)
+						ground_scorch_sprite.z_index = 1
+						var g_pos = ground_scorch_sprite.global_position
+						remove_child(ground_scorch_sprite)
+						ground_scorch_sprite.global_position = g_pos
+						parent_node.add_child(ground_scorch_sprite)
 				queue_free()
 
 func trigger_strike() -> void:
 	is_striking = true
 	strike_timer = STRIKE_DURATION
-	cleanup_timer = 1.65
+	cleanup_timer = 3.2
 
 	# Hide telegraph visuals
+	if telegraph_warning_sprite:
+		telegraph_warning_sprite.visible = false
 	if telegraph_circle:
 		telegraph_circle.visible = false
 	if telegraph_beam:
 		telegraph_beam.visible = false
 	if telegraph_sparks:
 		telegraph_sparks.emitting = false
+	if telegraph_light:
+		telegraph_light.enabled = false
+	for arc in telegraph_arcs:
+		arc.visible = false
 
-	# 1. Generate 1 single jagged main trunk bolt from sky down to ground impact (NO sky branches)
-	var start_y: float = -480.0
-	var current_y: float = start_y
-	var current_x: float = randf_range(-30.0, 30.0)
-	var bolt_points: PackedVector2Array = [Vector2(current_x, current_y)]
+	# Show Strike Sprite & Ground Scorch Decal
+	if strike_sprite:
+		strike_sprite.frame = 1
+		strike_sprite.modulate.a = 1.0
+		strike_sprite.visible = true
 
-	var segments: int = 15
-	var step_y: float = (0.0 - start_y) / float(segments)
+	if ground_scorch_sprite:
+		ground_scorch_sprite.frame = 2 # Molten magma fissures & searing embers embedded in floor
+		ground_scorch_sprite.modulate.a = 1.0
+		ground_scorch_sprite.visible = true
 
-	for i in range(1, segments):
-		current_y += step_y
-		# Jitter towards 0 as it approaches ground impact
-		var horizontal_jitter: float = lerp(22.0, 8.0, float(i) / float(segments))
-		current_x += randf_range(-horizontal_jitter, horizontal_jitter)
-		bolt_points.append(Vector2(current_x, current_y))
+	if ground_crackle_sprite:
+		ground_crackle_sprite.frame = 0
+		ground_crackle_sprite.modulate.a = 1.0
+		ground_crackle_sprite.visible = true
 
-	bolt_points.append(Vector2(0, 0)) # Exact ground impact point
+	# Impact flash & dynamic light
+	if impact_flash_sprite:
+		impact_flash_sprite.visible = true
+	if strike_light:
+		strike_light.energy = 6.5
 
-	bolt_line.points = bolt_points
-	bolt_line.visible = true
-	bolt_core.points = bolt_points
-	bolt_core.visible = true
-
-	# 2. Generate BIG Scatter of Rays upon hitting ground (0, 0)
-	# 16 multi-segmented jagged electrical discharge rays:
-	# - Rays 0, 1: horizontal left ground skimmers
-	# - Rays 2, 3: horizontal right ground skimmers
-	# - Rays 4 to 15: broad upward & diagonal starburst fan across upper hemisphere
-	for s_idx in range(ground_scatter_lines.size()):
-		var base_angle: float = 0.0
-		var ray_reach: float = 0.0
-		var num_segs: int = randi_range(4, 6)
-
-		if s_idx < 2:
-			# Skim along ground to the left
-			base_angle = deg_to_rad(randf_range(-178.0, -165.0))
-			ray_reach = randf_range(70.0, 110.0)
-		elif s_idx < 4:
-			# Skim along ground to the right
-			base_angle = deg_to_rad(randf_range(-15.0, -2.0))
-			ray_reach = randf_range(70.0, 110.0)
-		else:
-			# Upward & diagonal radial fan (-165° to -15°)
-			var fan_t: float = float(s_idx - 4) / 11.0 # 0.0 to 1.0
-			var deg: float = lerp(-165.0, -15.0, fan_t) + randf_range(-9.0, 9.0)
-			base_angle = deg_to_rad(deg)
-			ray_reach = randf_range(75.0, 135.0)
-
-		var cur_pt := Vector2.ZERO
-		var scatter_pts: PackedVector2Array = [cur_pt]
-		var step_dist: float = ray_reach / float(num_segs)
-		var ray_dir := Vector2(cos(base_angle), sin(base_angle))
-		var perp_dir := Vector2(-ray_dir.y, ray_dir.x)
-
-		for seg in range(1, num_segs + 1):
-			var forward_pos: Vector2 = ray_dir * (float(seg) * step_dist)
-			# Jagged perpendicular jitter
-			var jitter_amount: float = randf_range(-8.5, 8.5) * (1.0 - float(seg) / float(num_segs) * 0.25)
-			if s_idx < 4:
-				jitter_amount = clamp(jitter_amount, -4.5, 4.5)
-			var pt: Vector2 = forward_pos + perp_dir * jitter_amount
-			scatter_pts.append(pt)
-
-		ground_scatter_lines[s_idx].points = scatter_pts
-		ground_scatter_lines[s_idx].visible = true
-		ground_scatter_cores[s_idx].points = scatter_pts
-		ground_scatter_cores[s_idx].visible = true
-
-	# Generate 14 radiant straight needle burst rays (starburst spikes)
-	for b_idx in range(burst_ray_lines.size()):
-		var b_fan_t: float = float(b_idx) / float(burst_ray_lines.size() - 1)
-		var b_deg: float = lerp(-175.0, -5.0, b_fan_t) + randf_range(-6.0, 6.0)
-		var b_angle: float = deg_to_rad(b_deg)
-		var b_length: float = randf_range(60.0, 130.0)
-		var end_pt := Vector2(cos(b_angle), sin(b_angle)) * b_length
-
-		burst_ray_lines[b_idx].points = PackedVector2Array([Vector2.ZERO, end_pt])
-		burst_ray_lines[b_idx].visible = true
-
-	# Activate expanding electrical shockwave ring & impact flash
-	shockwave_ring.visible = true
-	impact_flash_sprite.visible = true
-
-	# 3. Fire impact debris, dust, sparks, residual smoke, searing embers & dynamic light
+	# Fire impact debris, dust, sparks, lingering smoke & embers
 	debris_particles.emitting = true
 	dust_particles.emitting = true
 	strike_sparks.emitting = true
@@ -514,7 +531,7 @@ func trigger_strike() -> void:
 	if crater_embers:
 		crater_embers.emitting = true
 
-	# Check for nearby trees to trigger singed leaf flutter
+	# Canopy leaf flutter
 	if is_inside_tree() and canopy_leaves:
 		var foliage_hit: bool = false
 		for n in get_tree().root.find_children("", "Sprite2D", true, false):
@@ -526,14 +543,14 @@ func trigger_strike() -> void:
 					foliage_hit = true
 					break
 		if not foliage_hit:
-			# Fallback ambient leaf dislodge
 			canopy_leaves.position.x = randf_range(-30.0, 30.0)
 			canopy_leaves.emitting = true
 
-	if strike_light:
-		strike_light.energy = 6.0
-
 	if is_inside_tree() and audio_player and audio_player.is_inside_tree() and audio_player.stream:
+		if audio_player.stream.resource_path.ends_with("lightning_strike.mp3"):
+			audio_player.pitch_scale = randf_range(0.95, 1.05)
+		else:
+			audio_player.pitch_scale = randf_range(0.36, 0.44)
 		audio_player.play()
 
 	strike_occurred.emit(global_position, DAMAGE)
@@ -544,17 +561,15 @@ func apply_blast_damage() -> void:
 		return
 	has_hit = true
 
-	# Find targets within blast radius
 	if not is_inside_tree():
 		return
 	var tree: SceneTree = get_tree()
 	if not tree:
 		return
 
-	# Damage player if in radius
+	# Damage player based on proximity to center
 	var player: Node = tree.get_first_node_in_group("player")
 	if not player:
-		# Fallback search by type
 		for n in get_tree().root.find_children("", "CharacterBody2D", true, false):
 			if n.get_script() and "player.gd" in n.get_script().resource_path:
 				player = n
@@ -562,20 +577,46 @@ func apply_blast_damage() -> void:
 
 	if is_instance_valid(player) and player is Node2D:
 		var p_node := player as Node2D
-		var p_dist: float = global_position.distance_to(p_node.global_position)
-		if p_dist <= BLAST_RADIUS:
+		var p_dx: float = abs(p_node.global_position.x - global_position.x)
+		var p_dy: float = abs(p_node.global_position.y - global_position.y)
+		if p_dx <= BLAST_RADIUS and p_dy <= 55.0:
 			var kdir: float = 1.0 if p_node.global_position.x >= global_position.x else -1.0
-			if player.has_method("take_damage"):
-				player.take_damage(DAMAGE, kdir)
-			elif player.has_method("take_damage_from_enemy"):
-				player.take_damage_from_enemy(DAMAGE, kdir, null)
+			if p_dx <= DIRECT_HIT_RADIUS:
+				# ── CENTER DIRECT HIT: Instant 1-hit lethal obliteration! ──
+				VFX.spawn_floating_text(get_parent(), p_node.global_position + Vector2(0, -52), "DIRECT HIT!", Color(1.0, 0.2, 0.2), 16, true)
+				var max_hp = player.get("MAX_HEALTH")
+				var lethal_amount = max_hp if max_hp != null else 5
+				if player.has_method("take_damage"):
+					player.take_damage(lethal_amount, kdir)
+				elif player.has_method("take_damage_from_enemy"):
+					player.take_damage_from_enemy(lethal_amount, kdir, null)
+			else:
+				# ── GLANCING SHOCKWAVE: 1 Damage + Stun / Guard Break! ──
+				VFX.spawn_floating_text(get_parent(), p_node.global_position + Vector2(0, -42), "SHOCKED!", Color(0.4, 0.85, 1.0), 14, true)
+				if player.has_method("take_damage"):
+					player.take_damage(1, kdir)
+				elif player.has_method("take_damage_from_enemy"):
+					player.take_damage_from_enemy(1, kdir, null)
+				if player.has_method("trigger_guard_break"):
+					player.trigger_guard_break(kdir)
 
 	# Damage any enemies in radius
 	for enemy in tree.get_nodes_in_group("enemies"):
 		if is_instance_valid(enemy) and enemy.is_inside_tree() and enemy is Node2D:
 			var e_node := enemy as Node2D
-			var e_dist: float = global_position.distance_to(e_node.global_position)
-			if e_dist <= BLAST_RADIUS:
+			var e_dx: float = abs(e_node.global_position.x - global_position.x)
+			var e_dy: float = abs(e_node.global_position.y - global_position.y)
+			if e_dx <= BLAST_RADIUS and e_dy <= 55.0:
 				var kdir: float = 1.0 if e_node.global_position.x >= global_position.x else -1.0
-				if enemy.has_method("take_damage"):
-					enemy.take_damage(DAMAGE, kdir)
+				if e_dx <= DIRECT_HIT_RADIUS:
+					# Direct hit on enemy: instant lethal kill (999 dmg)
+					VFX.spawn_floating_text(get_parent(), e_node.global_position + Vector2(0, -50), "OBLITERATED!", Color(1.0, 0.2, 0.2), 16, true)
+					if enemy.has_method("take_damage"):
+						enemy.take_damage(999, kdir)
+				else:
+					# Glancing hit: 1 damage + stun / stagger
+					VFX.spawn_floating_text(get_parent(), e_node.global_position + Vector2(0, -44), "STUNNED!", Color(0.4, 0.85, 1.0), 13, false)
+					if enemy.has_method("take_damage"):
+						enemy.take_damage(1, kdir)
+					if enemy.has_method("trigger_parried_stagger"):
+						enemy.trigger_parried_stagger(kdir)

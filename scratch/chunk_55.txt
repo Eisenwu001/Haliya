@@ -1,0 +1,19 @@
+Created At: 2026-10-27T08:00:04+08:00
+Completed At: 2026-10-27T08:00:04+08:00
+Showing lines 50-65 of 419
+50: static func spawn_parry_clash(parent: Node, pos: Vector2) -> Sprite2D:
+51: 	return spawn_animated_vfx(parent, PARRY_CLASH_TEX, pos, 2, 2, 4, 20.0, Vector2(0.08, 0.08))
+52: 
+53: static func spawn_riposte_slash(parent: Node, pos: Vector2, flip_h: bool = false) -> Sprite2D:
+54: 	return spawn_animated_vfx(parent, RIPOSTE_SLASH_TEX, pos, 3, 2, 6, 22.0, Vector2(0.16, 0.16), flip_h)
+55: 
+56: static func spawn_guard_impact(parent: Node, pos: Vector2) -> Sprite2D:
+57: 	return spawn_animated_vfx(parent, GUARD_IMPACT_TEX, pos, 3, 2, 6, 22.0, Vector2(0.09, 0.09))
+58: 
+59: static func spawn_blood_slash(parent: Node, pos: Vector2, flip_h: bool = false, vfx_scale: Vector2 = Vector2(1.0, 1.0)) -> Sprite2D:
+60: 	var final_scale = vfx_scale * 0.135
+61: 	return spawn_animated_vfx(parent, BLOOD_SLASH_TEX, pos, 3, 2, 6, 24.0, final_scale, flip_h)
+62: 
+63: static func spawn_lightning_strike_vfx(parent: Node, pos: Vector2, vfx_scale: Vector2 = Vector2(1.0, 1.0)) -> Sprite2D:
+64: 	if not is_instance_valid(parent) or not LIGHTNING_STRIKE_TEX:
+65: 		return null

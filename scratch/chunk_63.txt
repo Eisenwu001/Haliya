@@ -1,0 +1,51 @@
+Created At: 2026-10-27T08:00:35+08:00
+Completed At: 2026-10-27T08:00:35+08:00
+Showing lines 248-295 of 419
+248: # ── Floating Combat Text (Damage & Status Alerts) ─────────────────────────────
+249: static func spawn_floating_text(parent: Node, pos: Vector2, text: String, color: Color = Color(1, 1, 1, 1), font_size: int = 14, is_crit: bool = false) -> Label:
+250: 	if not is_instance_valid(parent):
+251: 		return null
+252: 	
+253: 	var label := Label.new()
+254: 	label.text = text
+255: 	label.add_theme_font_override("font", FONT_ALAGARD)
+256: 	label.add_theme_font_size_override("font_size", font_size)
+257: 	label.add_theme_color_override("font_color", color)
+258: 	label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+259: 	label.add_theme_constant_override("shadow_offset_x", 1)
+260: 	label.add_theme_constant_override("shadow_offset_y", 1)
+261: 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+262: 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+263: 	label.z_index = 60
+264: 	label.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+265: 	
+266: 	# Random subtle horizontal scatter (+/- 12px)
+267: 	var start_pos = pos + Vector2(randf_range(-10.0, 10.0), -12.0)
+268: 	label.global_position = start_pos
+269: 	
+270: 	if is_crit:
+271: 		label.scale = Vector2(1.35, 1.35)
+272: 		label.pivot_offset = Vector2(30.0, 10.0)
+273: 	
+274: 	parent.add_child(label)
+275: 	
+276: 	var tw = label.create_tween()
+277: 	var float_dist: float = 34.0 if is_crit else 24.0
+278: 	var dur: float = 0.65 if is_crit else 0.50
+279: 	
+280: 	tw.tween_property(label, "global_position:y", start_pos.y - float_dist, dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+281: 	if is_crit:
+282: 		tw.parallel().tween_property(label, "scale", Vector2(1.0, 1.0), 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+283: 	tw.parallel().tween_property(label, "modulate:a", 0.0, dur * 0.45).set_delay(dur * 0.55)
+284: 	tw.tween_callback(label.queue_free)
+285: 	
+286: 	return label
+287: 
+288: 
+289: # ── Boss Blood-Moon Shockwave & Cinematic Flares ────────────────────────────
+290: class BloodShockwaveRing extends Node2D:
+291: 	var radius: float = 14.0
+292: 	var max_radius: float = 160.0
+293: 	var ring_color: Color = Color(1.0, 0.22, 0.22, 0.95)
+294: 	var ring_width: float = 4.5
+295: 

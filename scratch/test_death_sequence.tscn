@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://cxvea471ksal0"]
+
+[ext_resource type="Script" path="res://scratch/test_death_sequence.gd" id="1_dth"]
+
+[node name="TestDeathSequence" type="Node2D"]
+script = ExtResource("1_dth")

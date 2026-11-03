@@ -1,0 +1,52 @@
+Created At: 2026-10-27T08:00:09+08:00
+Completed At: 2026-10-27T08:00:09+08:00
+Showing lines 1-49 of 419
+1: class_name VFX
+2: extends RefCounted
+3: 
+4: const PARRY_CLASH_TEX = preload("res://assets/vfx/vfx_parry_clash.png")
+5: const RIPOSTE_SLASH_TEX = preload("res://assets/vfx/vfx_riposte_slash.png")
+6: const GUARD_IMPACT_TEX = preload("res://assets/vfx/vfx_guard_impact.png")
+7: const STUN_STARS_TEX = preload("res://assets/vfx/vfx_stun_stars.png")
+8: const BLOOD_SLASH_TEX = preload("res://assets/vfx/vfx_blood_slash.png")
+9: const LIGHTNING_STRIKE_TEX = preload("res://assets/vfx/vfx_lightning_strike.png")
+10: const LIGHTNING_SCORCH_TEX = preload("res://assets/vfx/vfx_lightning_scorch.png")
+11: const FONT_ALAGARD = preload("res://alagard.ttf")
+12: 
+13: static func spawn_animated_vfx(parent: Node, texture: Texture2D, pos: Vector2, hframes: int, vframes: int = 1, total_frames: int = 0, fps: float = 24.0, vfx_scale: Vector2 = Vector2(1, 1), flip_h: bool = false) -> Sprite2D:
+14: 	if not is_instance_valid(parent) or not texture:
+15: 		return null
+16: 	
+17: 	var spr := Sprite2D.new()
+18: 	spr.texture = texture
+19: 	spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+20: 	spr.hframes = hframes
+21: 	spr.vframes = vframes
+22: 	spr.frame = 0
+23: 	spr.centered = true
+24: 	spr.global_position = pos
+25: 	spr.scale = vfx_scale
+26: 	spr.flip_h = flip_h
+27: 	spr.z_index = 25
+28: 	
+29: 	parent.add_child(spr)
+30: 	
+31: 	var count: int = total_frames if total_frames > 0 else (hframes * vframes)
+32: 	var frame_dur: float = 1.0 / fps
+33: 	_step_frame(spr, 0, count, frame_dur)
+34: 	return spr
+35: 
+36: static func _step_frame(spr: Sprite2D, current_frame: int, total_frames: int, frame_dur: float) -> void:
+37: 	if not is_instance_valid(spr):
+38: 		return
+39: 	
+40: 	if current_frame >= total_frames - 1:
+41: 		spr.queue_free()
+42: 		return
+43: 	
+44: 	spr.get_tree().create_timer(frame_dur, false, false, true).timeout.connect(func():
+45: 		if is_instance_valid(spr):
+46: 			spr.frame = current_frame + 1
+47: 			_step_frame(spr, current_frame + 1, total_frames, frame_dur)
+48: 	)
+49: 

@@ -203,7 +203,7 @@ func present_choices(entry: Dictionary) -> void:
 	for i in range(choices.size()):
 		var choice_text: String = choices[i]
 		var btn = Button.new()
-		btn.text = "✦ " + choice_text
+		btn.text = "> " + choice_text
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn.add_theme_font_override("font", FONT_RES)
 		btn.add_theme_font_size_override("font_size", 13)

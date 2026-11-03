@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://chaliyamnubtn"]
+
+[ext_resource type="Script" path="res://ui/components/haliya_menu_button.gd" id="1_btn"]
+[ext_resource type="Theme" path="res://ui/theme/haliya_theme.tres" id="2_thm"]
+
+[node name="HaliyaMenuButton" type="VBoxContainer"]
+texture_filter = 1
+theme = ExtResource("2_thm")
+script = ExtResource("1_btn")

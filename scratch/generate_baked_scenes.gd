@@ -13,9 +13,9 @@ const WIND_SHADER = preload("res://shaders/foliage_wind.gdshader")
 const PORTAL_TEX = preload("res://assets/platform_assets/Animated Sprites/portal_sheet.png")
 
 # Background-matching Canopy Trees
-const CANOPY_LARGE_TEX = preload("res://assets/foliage/tree_canopy_large.png")
-const CANOPY_MEDIUM_TEX = preload("res://assets/foliage/tree_canopy_medium.png")
-const CANOPY_CLUSTER_TEX = preload("res://assets/foliage/tree_canopy_cluster.png")
+const CANOPY_LARGE_TEX = preload("res://assets/foliage/canopy_sheet.png")
+const CANOPY_MEDIUM_TEX = preload("res://assets/foliage/canopy_sheet.png")
+const CANOPY_CLUSTER_TEX = preload("res://assets/foliage/canopy_sheet.png")
 
 # Rural Rice Field Props & Foliage
 const BANANA_TEX = preload("res://assets/bahay_kubo/prop_banana_tree.png")
@@ -215,8 +215,8 @@ func _init() -> void:
 		
 		var wind_mat = ShaderMaterial.new()
 		wind_mat.shader = WIND_SHADER
-		wind_mat.set_shader_parameter("wind_speed", 1.8)
-		wind_mat.set_shader_parameter("wind_strength", 4.5)
+		wind_mat.set_shader_parameter("wind_speed", 1.4)
+		wind_mat.set_shader_parameter("wind_strength", 1.6)
 		wind_mat.set_shader_parameter("wind_detail", 2.0)
 		
 		var f_idx = 1

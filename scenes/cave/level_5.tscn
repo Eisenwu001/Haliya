@@ -1,0 +1,241 @@
+[gd_scene format=4 uid="uid://bpcdrt11mru77"]
+
+[ext_resource type="TileSet" uid="uid://bltnv0p6fg21f" path="res://scenes/cave/cave_tileset.tres" id="1_tileset"]
+[ext_resource type="Texture2D" uid="uid://kx1ns7s0vmv6" path="res://assets/cave_platformer/cave_platforms.png" id="2_plat"]
+[ext_resource type="Script" uid="uid://ekvgctuo8die" path="res://scripts/cave_crumble_ledge.gd" id="4_crumble"]
+[ext_resource type="Script" uid="uid://dk0vl1mr3mcl4" path="res://scripts/cave_spike_hazard.gd" id="6_spike"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_112x16"]
+size = Vector2(74, 16)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_192x18"]
+size = Vector2(62, 18)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_160x18"]
+size = Vector2(87, 18)
+
+[node name="Level5" type="Node2D" unique_id=1452394309]
+
+[node name="BaseGround" type="TileMapLayer" parent="." unique_id=2108990394]
+tile_map_data = PackedByteArray("AAAAAAkAAAAAAAYAAAABAAkAAAABAAYAAAACAAkAAAABAAYAAAADAAkAAAABAAYAAAAEAAkAAAABAAYAAAAFAAkAAAABAAYAAAAGAAkAAAABAAYAAAAHAAkAAAABAAYAAAAIAAkAAAABAAYAAAAJAAkAAAABAAYAAAAKAAkAAAABAAYAAAALAAkAAAABAAYAAAAMAAkAAAABAAYAAAANAAkAAAABAAYAAAAOAAkAAAABAAYAAAAPAAkAAAABAAYAAAAQAAkAAAABAAYAAAARAAkAAAABAAYAAAASAAkAAAABAAYAAAATAAkAAAABAAYAAAAUAAkAAAABAAYAAAAVAAkAAAABAAYAAAAWAAkAAAABAAYAAAAXAAkAAAABAAYAAAAYAAkAAAACAAYAAAAgAAkAAAAAAAYAAAAhAAkAAAABAAYAAAAiAAkAAAABAAYAAAAjAAkAAAABAAYAAAAkAAkAAAABAAYAAAAlAAkAAAABAAYAAAAmAAkAAAABAAYAAAAnAAkAAAABAAYAAAAoAAkAAAABAAYAAAApAAkAAAABAAYAAAAqAAkAAAABAAYAAAArAAkAAAABAAYAAAAsAAkAAAABAAYAAAAtAAkAAAABAAYAAAAuAAkAAAABAAYAAAAvAAkAAAABAAYAAAAwAAkAAAABAAYAAAAxAAkAAAABAAYAAAAyAAkAAAABAAYAAAAzAAkAAAABAAYAAAA0AAkAAAACAAYAAAA9AAkAAAAAAAYAAAA+AAkAAAABAAYAAAA/AAkAAAABAAYAAABAAAkAAAABAAYAAABBAAkAAAABAAYAAABCAAkAAAABAAYAAABDAAkAAAABAAYAAABEAAkAAAABAAYAAABFAAkAAAABAAYAAABGAAkAAAABAAYAAABHAAkAAAABAAYAAABIAAkAAAABAAYAAABJAAkAAAABAAYAAABKAAkAAAABAAYAAABLAAkAAAABAAYAAABMAAkAAAABAAYAAABNAAkAAAABAAYAAABOAAkAAAABAAYAAABPAAkAAAABAAYAAABQAAkAAAABAAYAAABRAAkAAAABAAYAAABSAAkAAAACAAYAAABbAAkAAAAAAAYAAABcAAkAAAABAAYAAABdAAkAAAABAAYAAABeAAkAAAABAAYAAABfAAkAAAABAAYAAABgAAkAAAABAAYAAABhAAkAAAABAAYAAABiAAkAAAABAAYAAABjAAkAAAABAAYAAABkAAkAAAABAAYAAABlAAkAAAABAAYAAABmAAkAAAABAAYAAABnAAkAAAABAAYAAABoAAkAAAABAAYAAABpAAkAAAABAAYAAABqAAkAAAABAAYAAABrAAkAAAABAAYAAABsAAkAAAABAAYAAABtAAkAAAABAAYAAABuAAkAAAABAAYAAABvAAkAAAABAAYAAABwAAkAAAABAAYAAABxAAkAAAABAAYAAAByAAkAAAABAAYAAABzAAkAAAABAAYAAAB0AAkAAAABAAYAAAB1AAkAAAABAAYAAAB2AAkAAAABAAYAAAB3AAkAAAABAAYAAAB4AAkAAAABAAYAAAB5AAkAAAABAAYAAAB6AAkAAAABAAYAAAB7AAkAAAABAAYAAAB8AAkAAAABAAYAAAB9AAkAAAABAAYAAAB+AAkAAAABAAYAAAB/AAkAAAABAAYAAACAAAkAAAABAAYAAACBAAkAAAABAAYAAACCAAkAAAABAAYAAACDAAkAAAABAAYAAACEAAkAAAABAAYAAACFAAkAAAABAAYAAACGAAkAAAABAAYAAACHAAkAAAABAAYAAACIAAkAAAABAAYAAACJAAkAAAABAAYAAACKAAkAAAABAAYAAACLAAkAAAABAAYAAACMAAkAAAABAAYAAACNAAkAAAABAAYAAACOAAkAAAABAAYAAACPAAkAAAABAAYAAACQAAkAAAABAAYAAACRAAkAAAABAAYAAACSAAkAAAABAAYAAACTAAkAAAABAAYAAACUAAkAAAABAAYAAACVAAkAAAABAAYAAACWAAkAAAABAAYAAACXAAkAAAABAAYAAACYAAkAAAABAAYAAACZAAkAAAABAAYAAACaAAkAAAABAAYAAACbAAkAAAABAAYAAACcAAkAAAABAAYAAACdAAkAAAABAAYAAACeAAkAAAABAAYAAACfAAkAAAABAAYAAACgAAkAAAACAAYAAAAAAAoAAAAAAAcAAAABAAoAAAABAAcAAAACAAoAAAABAAcAAAADAAoAAAABAAcAAAAEAAoAAAABAAcAAAAFAAoAAAABAAcAAAAGAAoAAAABAAcAAAAHAAoAAAABAAcAAAAIAAoAAAABAAcAAAAJAAoAAAABAAcAAAAKAAoAAAABAAcAAAALAAoAAAABAAcAAAAMAAoAAAABAAcAAAANAAoAAAABAAcAAAAOAAoAAAABAAcAAAAPAAoAAAABAAcAAAAQAAoAAAABAAcAAAARAAoAAAABAAcAAAASAAoAAAABAAcAAAATAAoAAAABAAcAAAAUAAoAAAABAAcAAAAVAAoAAAABAAcAAAAWAAoAAAABAAcAAAAXAAoAAAABAAcAAAAYAAoAAAACAAcAAAAgAAoAAAAAAAcAAAAhAAoAAAABAAcAAAAiAAoAAAABAAcAAAAjAAoAAAABAAcAAAAkAAoAAAABAAcAAAAlAAoAAAABAAcAAAAmAAoAAAABAAcAAAAnAAoAAAABAAcAAAAoAAoAAAABAAcAAAApAAoAAAABAAcAAAAqAAoAAAABAAcAAAArAAoAAAABAAcAAAAsAAoAAAABAAcAAAAtAAoAAAABAAcAAAAuAAoAAAABAAcAAAAvAAoAAAABAAcAAAAwAAoAAAABAAcAAAAxAAoAAAABAAcAAAAyAAoAAAABAAcAAAAzAAoAAAABAAcAAAA0AAoAAAACAAcAAAA9AAoAAAAAAAcAAAA+AAoAAAABAAcAAAA/AAoAAAABAAcAAABAAAoAAAABAAcAAABBAAoAAAABAAcAAABCAAoAAAABAAcAAABDAAoAAAABAAcAAABEAAoAAAABAAcAAABFAAoAAAABAAcAAABGAAoAAAABAAcAAABHAAoAAAABAAcAAABIAAoAAAABAAcAAABJAAoAAAABAAcAAABKAAoAAAABAAcAAABLAAoAAAABAAcAAABMAAoAAAABAAcAAABNAAoAAAABAAcAAABOAAoAAAABAAcAAABPAAoAAAABAAcAAABQAAoAAAABAAcAAABRAAoAAAABAAcAAABSAAoAAAACAAcAAABbAAoAAAAAAAcAAABcAAoAAAABAAcAAABdAAoAAAABAAcAAABeAAoAAAABAAcAAABfAAoAAAABAAcAAABgAAoAAAABAAcAAABhAAoAAAABAAcAAABiAAoAAAABAAcAAABjAAoAAAABAAcAAABkAAoAAAABAAcAAABlAAoAAAABAAcAAABmAAoAAAABAAcAAABnAAoAAAABAAcAAABoAAoAAAABAAcAAABpAAoAAAABAAcAAABqAAoAAAABAAcAAABrAAoAAAABAAcAAABsAAoAAAABAAcAAABtAAoAAAABAAcAAABuAAoAAAABAAcAAABvAAoAAAABAAcAAABwAAoAAAABAAcAAABxAAoAAAABAAcAAAByAAoAAAABAAcAAABzAAoAAAABAAcAAAB0AAoAAAABAAcAAAB1AAoAAAABAAcAAAB2AAoAAAABAAcAAAB3AAoAAAABAAcAAAB4AAoAAAABAAcAAAB5AAoAAAABAAcAAAB6AAoAAAABAAcAAAB7AAoAAAABAAcAAAB8AAoAAAABAAcAAAB9AAoAAAABAAcAAAB+AAoAAAABAAcAAAB/AAoAAAABAAcAAACAAAoAAAABAAcAAACBAAoAAAABAAcAAACCAAoAAAABAAcAAACDAAoAAAABAAcAAACEAAoAAAABAAcAAACFAAoAAAABAAcAAACGAAoAAAABAAcAAACHAAoAAAABAAcAAACIAAoAAAABAAcAAACJAAoAAAABAAcAAACKAAoAAAABAAcAAACLAAoAAAABAAcAAACMAAoAAAABAAcAAACNAAoAAAABAAcAAACOAAoAAAABAAcAAACPAAoAAAABAAcAAACQAAoAAAABAAcAAACRAAoAAAABAAcAAACSAAoAAAABAAcAAACTAAoAAAABAAcAAACUAAoAAAABAAcAAACVAAoAAAABAAcAAACWAAoAAAABAAcAAACXAAoAAAABAAcAAACYAAoAAAABAAcAAACZAAoAAAABAAcAAACaAAoAAAABAAcAAACbAAoAAAABAAcAAACcAAoAAAABAAcAAACdAAoAAAABAAcAAACeAAoAAAABAAcAAACfAAoAAAABAAcAAACgAAoAAAACAAcAAAAAAAsAAAAAAAcAAAABAAsAAAABAAcAAAACAAsAAAABAAcAAAADAAsAAAABAAcAAAAEAAsAAAABAAcAAAAFAAsAAAABAAcAAAAGAAsAAAABAAcAAAAHAAsAAAABAAcAAAAIAAsAAAABAAcAAAAJAAsAAAABAAcAAAAKAAsAAAABAAcAAAALAAsAAAABAAcAAAAMAAsAAAABAAcAAAANAAsAAAABAAcAAAAOAAsAAAABAAcAAAAPAAsAAAABAAcAAAAQAAsAAAABAAcAAAARAAsAAAABAAcAAAASAAsAAAABAAcAAAATAAsAAAABAAcAAAAUAAsAAAABAAcAAAAVAAsAAAABAAcAAAAWAAsAAAABAAcAAAAXAAsAAAABAAcAAAAYAAsAAAACAAcAAAAZAAsAAAABAAcAAAAaAAsAAAABAAcAAAAbAAsAAAABAAcAAAAcAAsAAAABAAcAAAAdAAsAAAABAAcAAAAeAAsAAAABAAcAAAAfAAsAAAABAAcAAAAgAAsAAAAAAAcAAAAhAAsAAAABAAcAAAAiAAsAAAABAAcAAAAjAAsAAAABAAcAAAAkAAsAAAABAAcAAAAlAAsAAAABAAcAAAAmAAsAAAABAAcAAAAnAAsAAAABAAcAAAAoAAsAAAABAAcAAAApAAsAAAABAAcAAAAqAAsAAAABAAcAAAArAAsAAAABAAcAAAAsAAsAAAABAAcAAAAtAAsAAAABAAcAAAAuAAsAAAABAAcAAAAvAAsAAAABAAcAAAAwAAsAAAABAAcAAAAxAAsAAAABAAcAAAAyAAsAAAABAAcAAAAzAAsAAAABAAcAAAA0AAsAAAACAAcAAAA1AAsAAAABAAcAAAA2AAsAAAABAAcAAAA3AAsAAAABAAcAAAA4AAsAAAABAAcAAAA5AAsAAAABAAcAAAA6AAsAAAABAAcAAAA7AAsAAAABAAcAAAA8AAsAAAABAAcAAAA9AAsAAAAAAAcAAAA+AAsAAAABAAcAAAA/AAsAAAABAAcAAABAAAsAAAABAAcAAABBAAsAAAABAAcAAABCAAsAAAABAAcAAABDAAsAAAABAAcAAABEAAsAAAABAAcAAABFAAsAAAABAAcAAABGAAsAAAABAAcAAABHAAsAAAABAAcAAABIAAsAAAABAAcAAABJAAsAAAABAAcAAABKAAsAAAABAAcAAABLAAsAAAABAAcAAABMAAsAAAABAAcAAABNAAsAAAABAAcAAABOAAsAAAABAAcAAABPAAsAAAABAAcAAABQAAsAAAABAAcAAABRAAsAAAABAAcAAABSAAsAAAACAAcAAABTAAsAAAABAAcAAABUAAsAAAABAAcAAABVAAsAAAABAAcAAABWAAsAAAABAAcAAABXAAsAAAABAAcAAABYAAsAAAABAAcAAABZAAsAAAABAAcAAABaAAsAAAABAAcAAABbAAsAAAAAAAcAAABcAAsAAAABAAcAAABdAAsAAAABAAcAAABeAAsAAAABAAcAAABfAAsAAAABAAcAAABgAAsAAAABAAcAAABhAAsAAAABAAcAAABiAAsAAAABAAcAAABjAAsAAAABAAcAAABkAAsAAAABAAcAAABlAAsAAAABAAcAAABmAAsAAAABAAcAAABnAAsAAAABAAcAAABoAAsAAAABAAcAAABpAAsAAAABAAcAAABqAAsAAAABAAcAAABrAAsAAAABAAcAAABsAAsAAAABAAcAAABtAAsAAAABAAcAAABuAAsAAAABAAcAAABvAAsAAAABAAcAAABwAAsAAAABAAcAAABxAAsAAAABAAcAAAByAAsAAAABAAcAAABzAAsAAAABAAcAAAB0AAsAAAABAAcAAAB1AAsAAAABAAcAAAB2AAsAAAABAAcAAAB3AAsAAAABAAcAAAB4AAsAAAABAAcAAAB5AAsAAAABAAcAAAB6AAsAAAABAAcAAAB7AAsAAAABAAcAAAB8AAsAAAABAAcAAAB9AAsAAAABAAcAAAB+AAsAAAABAAcAAAB/AAsAAAABAAcAAACAAAsAAAABAAcAAACBAAsAAAABAAcAAACCAAsAAAABAAcAAACDAAsAAAABAAcAAACEAAsAAAABAAcAAACFAAsAAAABAAcAAACGAAsAAAABAAcAAACHAAsAAAABAAcAAACIAAsAAAABAAcAAACJAAsAAAABAAcAAACKAAsAAAABAAcAAACLAAsAAAABAAcAAACMAAsAAAABAAcAAACNAAsAAAABAAcAAACOAAsAAAABAAcAAACPAAsAAAABAAcAAACQAAsAAAABAAcAAACRAAsAAAABAAcAAACSAAsAAAABAAcAAACTAAsAAAABAAcAAACUAAsAAAABAAcAAACVAAsAAAABAAcAAACWAAsAAAABAAcAAACXAAsAAAABAAcAAACYAAsAAAABAAcAAACZAAsAAAABAAcAAACaAAsAAAABAAcAAACbAAsAAAABAAcAAACcAAsAAAABAAcAAACdAAsAAAABAAcAAACeAAsAAAABAAcAAACfAAsAAAABAAcAAACgAAsAAAACAAcAAAA=")
+tile_set = ExtResource("1_tileset")
+
+[node name="ElevatedPlatforms" type="Node2D" parent="." unique_id=1795013228]
+
+[node name="CavePlatform_1" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=235648937]
+position = Vector2(896, 240)
+
+[node name="CavePlatform_2" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=679228722]
+position = Vector2(980, 215)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_2" unique_id=1995333616]
+position = Vector2(-70, 55)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_2" unique_id=2110707561]
+position = Vector2(-69, 68)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_3" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=877864661]
+position = Vector2(1280, 210)
+
+[node name="CavePlatform_4" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1103395880]
+position = Vector2(1520, 185)
+
+[node name="CavePlatform_5" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=980308062]
+position = Vector2(1821, 215)
+
+[node name="CavePlatform_6" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1376275596]
+position = Vector2(1780, 140)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_6" unique_id=1238349758]
+position = Vector2(38, 111)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_6" unique_id=1165468255]
+position = Vector2(40, 125)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_7" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=188686795]
+position = Vector2(2180, 215)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_7" unique_id=1170118129]
+position = Vector2(0, 8)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_7" unique_id=241170766]
+position = Vector2(0, 24)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_8" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=173290844]
+position = Vector2(2440, 190)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_8" unique_id=2105223544]
+position = Vector2(0, 9)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_8" unique_id=977918760]
+position = Vector2(0, 28)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_9" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1186515391]
+position = Vector2(2768, 235)
+
+[node name="CavePlatform_10" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1927343973]
+position = Vector2(2850, 210)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_10" unique_id=428442573]
+position = Vector2(-78, 52)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_10" unique_id=613488342]
+position = Vector2(-78, 69)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_11" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=522032799]
+position = Vector2(3250, 205)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_11" unique_id=2045789883]
+position = Vector2(4, -46)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_11" unique_id=1277908218]
+position = Vector2(3, -28)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_12" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=2086920820]
+position = Vector2(3550, 215)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_12" unique_id=1460816682]
+position = Vector2(1.5, 9)
+shape = SubResource("RectangleShape2D_160x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_12" unique_id=1147774125]
+position = Vector2(0, 19)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 0, 160, 56)
+
+[node name="CavePlatform_13" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1972434309]
+position = Vector2(3920, 215)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_13" unique_id=42593666]
+position = Vector2(0, 9)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_13" unique_id=295794307]
+position = Vector2(0, 28)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_14" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=548751863]
+position = Vector2(4160, 165)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_14" unique_id=1637788929]
+position = Vector2(0, 8)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_14" unique_id=1186973934]
+position = Vector2(0, 24)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_15" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1390375377]
+position = Vector2(4450, 195)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_15" unique_id=1864558794]
+position = Vector2(0, 9)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_15" unique_id=1068134024]
+position = Vector2(0, 28)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CavePlatform_16" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=491852434]
+position = Vector2(4740, 165)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_16" unique_id=1155728575]
+position = Vector2(0, 8)
+shape = SubResource("RectangleShape2D_112x16")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_16" unique_id=638982138]
+position = Vector2(0, 24)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(0, 64, 112, 48)
+
+[node name="CavePlatform_17" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1069213286]
+position = Vector2(4980, 215)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ElevatedPlatforms/CavePlatform_17" unique_id=1142708647]
+position = Vector2(0, 9)
+shape = SubResource("RectangleShape2D_192x18")
+one_way_collision = true
+
+[node name="PlatformVisual" type="Sprite2D" parent="ElevatedPlatforms/CavePlatform_17" unique_id=530629513]
+position = Vector2(0, 28)
+texture = ExtResource("2_plat")
+region_enabled = true
+region_rect = Rect2(160, 0, 192, 56)
+
+[node name="CrumbleLedge_1" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1308780629]
+position = Vector2(776, 210)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_2" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=945328324]
+position = Vector2(1344, 195)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_4" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1891625354]
+position = Vector2(2264, 200)
+script = ExtResource("4_crumble")
+
+[node name="CrumbleLedge_5" type="StaticBody2D" parent="ElevatedPlatforms" unique_id=1696528764]
+position = Vector2(2632, 210)
+script = ExtResource("4_crumble")
+
+[node name="SpikeHazards" type="Node2D" parent="." unique_id=1533329214]
+
+[node name="SpikeBed_1" type="Area2D" parent="SpikeHazards" unique_id=1332359400]
+position = Vector2(768, 320)
+script = ExtResource("6_spike")
+hazard_width = 256.0
+
+[node name="SpikeBed_2" type="Area2D" parent="SpikeHazards" unique_id=64391489]
+position = Vector2(1664, 320)
+script = ExtResource("6_spike")
+hazard_width = 288.0
+
+[node name="SpikeBed_3" type="Area2D" parent="SpikeHazards" unique_id=1867990230]
+position = Vector2(2624, 320)
+script = ExtResource("6_spike")
+hazard_width = 288.0
+
+[node name="Enemies" type="Node2D" parent="." unique_id=1195847340]

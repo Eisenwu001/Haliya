@@ -28,11 +28,28 @@ const AGGRO_RANGE: float = 260.0
 const ATTACK_RANGE: float = 42.0
 const LEAP_TRIGGER_MIN_RANGE: float = 70.0
 const LEAP_TRIGGER_MAX_RANGE: float = 230.0
-const MAX_HEALTH: int = 3
+const MAX_HEALTH: int = 6
 
 # State & Combat variables
 var current_state: State = State.IDLE
 var health: int = MAX_HEALTH
+var max_health: int = MAX_HEALTH
+var is_elite: bool = false
+var speed_multiplier: float = 1.0
+
+func apply_difficulty_scaling(hp_mult: float, spd_mult: float, elite: bool = false) -> void:
+	is_elite = elite
+	speed_multiplier = spd_mult
+	if is_elite:
+		max_health = int(round(MAX_HEALTH * hp_mult * 1.5))
+		speed_multiplier *= 1.20
+		if is_instance_valid(sprite):
+			sprite.modulate = Color(1.35, 0.45, 0.85, 1.0)
+	else:
+		max_health = int(round(MAX_HEALTH * hp_mult))
+	health = max_health
+	if is_instance_valid(health_pips):
+		health_pips.update_health(health, max_health)
 var is_facing_left: bool = false
 var is_dead: bool = false
 
@@ -91,6 +108,7 @@ var health_pips: Node2D
 
 
 func _ready() -> void:
+	z_index = 4
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	add_to_group("enemies")
 	add_to_group("aswang")
@@ -253,6 +271,12 @@ func _physics_process(delta: float) -> void:
 		handle_death_process(delta)
 		return
 	
+	# Void / pit fall death check
+	if global_position.y > 360.0:
+		health = 0
+		trigger_death()
+		return
+
 	# Gravity
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
@@ -406,7 +430,7 @@ func update_ai(delta: float) -> void:
 	if player_in_sight:
 		is_facing_left = (dx_to_player < 0.0)
 		var chase_dir: float = -1.0 if is_facing_left else 1.0
-		var target_vx: float = chase_dir * CHASE_SPEED
+		var target_vx: float = chase_dir * (CHASE_SPEED * speed_multiplier)
 		velocity.x = move_toward(velocity.x, target_vx, ACCELERATION * delta)
 		if current_state != State.RUN:
 			set_state(State.RUN)
@@ -421,7 +445,7 @@ func update_ai(delta: float) -> void:
 		return
 	
 	# Move in patrol direction
-	var patrol_target_vx: float = patrol_direction * PATROL_SPEED
+	var patrol_target_vx: float = patrol_direction * (PATROL_SPEED * speed_multiplier)
 	velocity.x = move_toward(velocity.x, patrol_target_vx, ACCELERATION * delta)
 	is_facing_left = (patrol_direction < 0.0)
 	if current_state != State.WALK:
@@ -499,8 +523,9 @@ func deflect_by_parry(deflect_dir: float) -> void:
 	if is_instance_valid(stun_stars_sprite):
 		stun_stars_sprite.visible = true
 	if is_instance_valid(health_pips):
-		health_pips.update_health(health, MAX_HEALTH, true)
+		health_pips.update_health(health, max_health, true)
 	VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -56.0), "STAGGERED!", Color(1.0, 0.85, 0.2), 14, true)
+	VFX.spawn_stagger_execution_prompt(get_parent(), global_position + Vector2(0, -78.0))
 	
 	# Forceful backward deflection recoil
 	velocity.x = deflect_dir * 230.0
@@ -526,7 +551,7 @@ func take_damage(amount: int, knockback_dir: float = 0.0) -> void:
 			stun_stars_sprite.visible = false
 		health = 0
 		if is_instance_valid(health_pips):
-			health_pips.update_health(0, MAX_HEALTH, false)
+			health_pips.update_health(0, max_health, false)
 		VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -52.0), "CRIT 99!", Color(1.0, 0.9, 0.2), 16, true)
 		if is_instance_valid(sprite):
 			sprite.modulate = Color(2.5, 2.0, 0.5, 1.0)
@@ -535,7 +560,7 @@ func take_damage(amount: int, knockback_dir: float = 0.0) -> void:
 	
 	health -= amount
 	if is_instance_valid(health_pips):
-		health_pips.update_health(health, MAX_HEALTH, false)
+		health_pips.update_health(health, max_health, false)
 	VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -45.0), str(amount), Color(1.0, 0.35, 0.25), 14, false)
 
 	# Visceral Aswang Blood Splatter
@@ -564,6 +589,8 @@ func take_damage(amount: int, knockback_dir: float = 0.0) -> void:
 
 func trigger_death() -> void:
 	is_dead = true
+	if is_elite:
+		VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -60.0), "ELITE SLAIN", Color(1.0, 0.85, 0.35), 14, true)
 	if is_instance_valid(stun_stars_sprite):
 		stun_stars_sprite.visible = false
 	if is_instance_valid(health_pips):

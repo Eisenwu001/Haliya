@@ -8,6 +8,7 @@ const DialogueManagerScript = preload("res://scripts/dialogue_manager.gd")
 const KapreNPCScript = preload("res://scripts/kapre_npc.gd")
 const WeaponRackScript = preload("res://scripts/weapon_rack.gd")
 const MaskAltarScript = preload("res://scripts/mask_altar.gd")
+const BestiaryCodexUIScript = preload("res://scripts/bestiary_codex_ui.gd")
 
 const LEVEL_WIDTH: float = 1920.0
 const PLAYER_SPAWN_POS: Vector2 = Vector2(175, 255)
@@ -23,6 +24,9 @@ var guardian_enemy: Aswang
 var gateway_active: bool = false
 var exit_wall: CollisionShape2D
 var is_transitioning: bool = false
+var bestiary_codex_ui: CanvasLayer
+var bgm_player: AudioStreamPlayer
+var altar_prompt_label: Label
 
 # UI references
 var ui_layer: CanvasLayer
@@ -30,6 +34,7 @@ var area_title_label: Label
 var area_title_timer: float = 0.0
 var hp_bar_root: Control
 var hp_segments: Array[ColorRect] = []
+var hp_shield_segments: Array[ColorRect] = []
 var stamina_bar_root: Control
 var stamina_bar_fill: ColorRect
 var weapon_badge_label: Label
@@ -42,6 +47,7 @@ func _ready() -> void:
 	setup_player()
 	setup_camera()
 	setup_dialogue_system()
+	setup_bgm()
 	setup_kapre_and_altar()
 	setup_ui()
 	trigger_area_discovery("ACT 1 — BAHAY KUBO (THE HOMESTEAD)")
@@ -230,6 +236,7 @@ func setup_player() -> void:
 	
 	player.player_died.connect(_on_player_died)
 	player.hp_changed.connect(_on_player_hp_changed)
+	player.armor_changed.connect(_on_player_armor_changed)
 	player.stamina_changed.connect(_on_player_stamina_changed)
 
 func setup_camera() -> void:
@@ -346,6 +353,17 @@ func setup_ui() -> void:
 		seg.color = Color(0.66, 0.12, 0.18, 1.0)
 		hp_bar_root.add_child(seg)
 		hp_segments.append(seg)
+
+	# Luminous Crystal Shield Coating Segments (Layered directly over health)
+	hp_shield_segments.clear()
+	for i in range(5):
+		var s_seg = ColorRect.new()
+		s_seg.position = Vector2(1 + i * 30, 1)
+		s_seg.size = Vector2(28, 6)
+		s_seg.color = Color(0.35, 0.85, 1.35, 0.90)
+		s_seg.visible = (i < 3)
+		hp_bar_root.add_child(s_seg)
+		hp_shield_segments.append(s_seg)
 	
 	# Stamina Bar Root (Top-Left: 14, 26)
 	stamina_bar_root = Control.new()
@@ -377,18 +395,38 @@ func setup_ui() -> void:
 	weapon_badge_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.90))
 	ui_layer.add_child(weapon_badge_label)
 	
+	# Codex & Ancestral Altar UI
+	bestiary_codex_ui = BestiaryCodexUIScript.new()
+	bestiary_codex_ui.name = "BestiaryCodexUI"
+	add_child(bestiary_codex_ui)
+
 	# Area Discovery Label (Center Upper)
 	area_title_label = Label.new()
-	area_title_label.position = Vector2(120, 55)
+	area_title_label.position = Vector2(120, 50)
 	area_title_label.size = Vector2(400, 32)
 	area_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	area_title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	area_title_label.text = "✦ ACT 1 — BAHAY KUBO ✦"
+	area_title_label.text = "ACT 1 — BAHAY KUBO (THE HOMESTEAD)"
 	area_title_label.add_theme_font_override("font", custom_font)
 	area_title_label.add_theme_font_size_override("font_size", 16)
 	area_title_label.add_theme_color_override("font_color", Color(0.96, 0.88, 0.68, 1.0))
 	area_title_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+	area_title_label.visible = true
 	ui_layer.add_child(area_title_label)
+
+	# Altar interaction prompt
+	altar_prompt_label = Label.new()
+	altar_prompt_label.name = "AltarPromptLabel"
+	altar_prompt_label.position = Vector2(160, 295)
+	altar_prompt_label.size = Vector2(320, 24)
+	altar_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	altar_prompt_label.text = "[E / ENTER] CONSULT LORE CODEX"
+	altar_prompt_label.add_theme_font_override("font", custom_font)
+	altar_prompt_label.add_theme_font_size_override("font_size", 12)
+	altar_prompt_label.add_theme_color_override("font_color", Color(1.0, 0.90, 0.45, 0.95))
+	altar_prompt_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+	altar_prompt_label.visible = false
+	ui_layer.add_child(altar_prompt_label)
 
 func _process(delta: float) -> void:
 	if player:
@@ -406,11 +444,20 @@ func _process(delta: float) -> void:
 		if area_title_label:
 			area_title_label.modulate.a = alpha
 
+	# Altar interaction check
+	if player and is_instance_valid(mask_altar) and is_instance_valid(altar_prompt_label):
+		var dist_to_altar = abs(player.global_position.x - mask_altar.global_position.x)
+		var is_near = dist_to_altar < 65.0
+		altar_prompt_label.visible = is_near
+		if is_near and Input.is_action_just_pressed("ui_accept"):
+			if is_instance_valid(bestiary_codex_ui) and not bestiary_codex_ui.visible:
+				bestiary_codex_ui.open_menu()
+
 func trigger_area_discovery(text_title: String) -> void:
 	if area_title_label:
 		area_title_label.text = text_title
-		area_title_timer = 3.2
 		area_title_label.modulate.a = 1.0
+	area_title_timer = 3.6
 
 func _on_weapon_selected(w_name: String) -> void:
 	if weapon_badge_label:
@@ -425,7 +472,7 @@ func _on_mask_claimed() -> void:
 	gateway_active = true
 	if exit_wall:
 		exit_wall.position = Vector2(LEVEL_WIDTH + 200, 0)
-	trigger_area_discovery("✦ PATH TO THE OVERWORLD UNLOCKED ✦")
+	trigger_area_discovery("PATH TO THE OVERWORLD UNLOCKED")
 
 func transition_to_overworld() -> void:
 	if is_transitioning:
@@ -447,6 +494,10 @@ func _on_player_died() -> void:
 	if player:
 		player.global_position = PLAYER_SPAWN_POS
 		player.velocity = Vector2.ZERO
+		player.current_hp = player.get_max_hp() if player.has_method("get_max_hp") else 5
+		player.current_armor = player.get_max_armor() if player.has_method("get_max_armor") else 3
+		player.hp_changed.emit(player.current_hp, player.current_hp)
+		player.armor_changed.emit(player.current_armor, player.current_armor)
 		if player.has_method("reset_combat_state"):
 			player.reset_combat_state()
 
@@ -454,7 +505,24 @@ func _on_player_hp_changed(current: int, _max_hp: int) -> void:
 	for i in range(hp_segments.size()):
 		hp_segments[i].color = Color(0.66, 0.12, 0.18, 1.0) if i < current else Color(0.12, 0.10, 0.12, 0.90)
 
+func _on_player_armor_changed(current: int, _max_armor: int) -> void:
+	for i in range(hp_shield_segments.size()):
+		hp_shield_segments[i].visible = (i < current)
+
 func _on_player_stamina_changed(current: float, max_stamina: float) -> void:
 	if stamina_bar_fill:
 		var ratio = clamp(current / max_stamina, 0.0, 1.0)
 		stamina_bar_fill.size.x = 120.0 * ratio
+		if is_instance_valid(player) and player.get("is_exhausted") == true:
+			stamina_bar_fill.modulate = Color(1.6, 0.45, 0.45, 1.0)
+		else:
+			stamina_bar_fill.modulate = Color(1.0, 1.0, 1.0, 1.0)
+
+func setup_bgm() -> void:
+	bgm_player = AudioStreamPlayer.new()
+	bgm_player.name = "BGMPlayer"
+	bgm_player.bus = "Master"
+	bgm_player.stream = ProceduralAudio.get_kulintang_exploration_bgm()
+	bgm_player.volume_db = -10.0
+	add_child(bgm_player)
+	bgm_player.play()

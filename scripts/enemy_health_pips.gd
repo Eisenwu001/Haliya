@@ -49,12 +49,17 @@ func _draw() -> void:
 	if modulate.a <= 0.01:
 		return
 		
-	var total_w = max_hp * PIP_WIDTH + (max_hp - 1) * PIP_GAP
+	var pip_w = PIP_WIDTH
+	var pip_gap = PIP_GAP
+	if max_hp > 12:
+		pip_w = 4.5
+		pip_gap = 1.5
+	var total_w = max_hp * pip_w + (max_hp - 1) * pip_gap
 	var start_x = -total_w * 0.5
 	
 	for i in range(max_hp):
-		var x = start_x + i * (PIP_WIDTH + PIP_GAP)
-		var pip_rect = Rect2(x, -PIP_HEIGHT * 0.5, PIP_WIDTH, PIP_HEIGHT)
+		var x = start_x + i * (pip_w + pip_gap)
+		var pip_rect = Rect2(x, -PIP_HEIGHT * 0.5, pip_w, PIP_HEIGHT)
 		
 		# Background/Border
 		draw_rect(pip_rect.grow(1.0), Color(0.04, 0.04, 0.05, 0.95), true)

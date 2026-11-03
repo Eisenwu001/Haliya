@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://7nvoo7sir3wu"]
+
+[ext_resource type="Script" path="res://scripts/totem_surround.gd" id="1_surround"]
+
+[node name="TotemSurround" type="Node2D"]
+texture_filter = 1
+script = ExtResource("1_surround")

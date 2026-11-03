@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://c3rfdo681s7uy"]
+
+[ext_resource type="Script" path="res://scripts/foreground_foliage.gd" id="1_foliage"]
+
+[node name="ForegroundFoliage" type="Node2D"]
+texture_filter = 1
+script = ExtResource("1_foliage")

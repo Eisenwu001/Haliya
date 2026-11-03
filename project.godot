@@ -11,6 +11,7 @@ config_version=5
 [application]
 
 config/name="Haliya: Mask of Sorrows"
+config/version="1.3.0"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
@@ -23,8 +24,12 @@ window/size/mode=4
 window/size/window_width_override=1280
 window/size/window_height_override=720
 window/stretch/mode="canvas_items"
-window/stretch/aspect="expand"
 window/stretch/scale_mode="integer"
+mouse_cursor/custom_image="res://assets/ui/cursor_arrow.png"
+
+[gui]
+
+theme/custom="res://ui/theme/haliya_theme.tres"
 
 [input]
 
@@ -83,5 +88,6 @@ interact={
 
 [rendering]
 
+textures/canvas_textures/default_texture_filter=0
 rendering_device/driver.windows="d3d12"
 environment/defaults/default_clear_color=Color(0, 0, 0, 1)

@@ -1,0 +1,7 @@
+[gd_scene format=3 uid="uid://bheroprop001"]
+
+[ext_resource type="Script" path="res://scripts/hero_prop.gd" id="1_prop"]
+
+[node name="HeroProp" type="Node2D"]
+texture_filter = 1
+script = ExtResource("1_prop")

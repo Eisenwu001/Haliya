@@ -10,7 +10,7 @@ func _init(w: float = 64.0, h: float = 32.0) -> void:
 
 func _ready() -> void:
 	collision_layer = 0
-	collision_mask = 2 # Player layer
+	collision_mask = 2 | 4 # Player (2) and Enemies (4)
 	
 	if has_node("CollisionShape2D"):
 		if not body_entered.is_connected(_on_body_entered):
@@ -35,6 +35,14 @@ func _on_body_entered(body: Node2D) -> void:
 		# Reset player back to last safe grounded ledge with 1 damage
 		if body.has_method("respawn_at_safe_ledge"):
 			body.respawn_at_safe_ledge(1)
+	elif body.is_in_group("enemies") or body is CharacterBody2D:
+		spawn_splash(body.global_position)
+		if body.has_method("take_damage"):
+			body.take_damage(999, 0.0)
+		elif body.has_method("trigger_death"):
+			body.trigger_death()
+		elif body.has_method("shatter_death"):
+			body.shatter_death(1.0)
 
 func spawn_splash(pos: Vector2) -> void:
 	var splash := CPUParticles2D.new()

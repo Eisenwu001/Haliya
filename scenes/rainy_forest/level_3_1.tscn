@@ -1,21 +1,19 @@
 [gd_scene format=4 uid="uid://dl5at6ket2g8n"]
 
-[ext_resource type="TileSet" uid="uid://2pqd42xgw7q0" path="res://scenes/tileset.tres" id="1_ewvpd"]
+[ext_resource type="TileSet" uid="uid://caqafd7pfb2tm" path="res://scenes/tileset.tres" id="1_ewvpd"]
 [ext_resource type="Shader" uid="uid://blr628t4av7i5" path="res://shaders/foliage_wind.gdshader" id="2_evrf2"]
 [ext_resource type="Texture2D" uid="uid://df0klisu1vrkp" path="res://assets/foliage/narra_tree_1.png" id="3_qrfgh"]
 [ext_resource type="Texture2D" uid="uid://dekpolmu0cydr" path="res://assets/foliage/narra_tree_2.png" id="4_nf277"]
 [ext_resource type="Texture2D" uid="uid://slchr65i4iyg" path="res://assets/foliage/narra_tree_4.png" id="5_s1ko2"]
 [ext_resource type="Texture2D" uid="uid://dnikqq1qmmwep" path="res://assets/foliage/narra_tree_5.png" id="6_w3hxi"]
 [ext_resource type="Texture2D" uid="uid://vrgcu5l8in70" path="res://assets/foliage/narra_tree_3.png" id="7_en36e"]
-[ext_resource type="Script" uid="uid://cpot0khbvfvyc" path="res://scripts/environment_torch.gd" id="8_qsron"]
-[ext_resource type="Script" uid="uid://caxpuawr3b3v4" path="res://scripts/palayok_pot.gd" id="9_j5f13"]
 [ext_resource type="Script" uid="uid://b6v2malf4os04" path="res://scripts/aswang.gd" id="10_l3bd5"]
 [ext_resource type="Script" uid="uid://cdwq310oywb6e" path="res://scripts/skeleton.gd" id="11_25fjm"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_kuhmx"]
 shader = ExtResource("2_evrf2")
-shader_parameter/wind_speed = 2.6
-shader_parameter/wind_strength = 6.2
+shader_parameter/wind_speed = 2.0
+shader_parameter/wind_strength = 2.6
 shader_parameter/wind_detail = 2.5
 
 [node name="Level_3_1" type="Node2D" unique_id=1890477643]
@@ -107,48 +105,6 @@ position = Vector2(4500, 300)
 scale = Vector2(0.34, 0.34)
 texture = ExtResource("6_w3hxi")
 offset = Vector2(0, -439)
-
-[node name="Torches" type="Node2D" parent="." unique_id=7858953]
-visible = false
-
-[node name="Torch_01" type="Node2D" parent="Torches" unique_id=2033440963]
-position = Vector2(320, 288)
-script = ExtResource("8_qsron")
-
-[node name="Torch_02" type="Node2D" parent="Torches" unique_id=242077019]
-position = Vector2(1200, 224)
-script = ExtResource("8_qsron")
-
-[node name="Torch_03" type="Node2D" parent="Torches" unique_id=1887180989]
-position = Vector2(2100, 240)
-script = ExtResource("8_qsron")
-
-[node name="Torch_04" type="Node2D" parent="Torches" unique_id=1230629965]
-position = Vector2(3300, 256)
-script = ExtResource("8_qsron")
-
-[node name="Torch_05" type="Node2D" parent="Torches" unique_id=925980842]
-position = Vector2(4800, 288)
-script = ExtResource("8_qsron")
-
-[node name="Breakables" type="Node2D" parent="." unique_id=1303113570]
-visible = false
-
-[node name="PalayokPot_01" type="StaticBody2D" parent="Breakables" unique_id=395851772]
-position = Vector2(599, 283)
-script = ExtResource("9_j5f13")
-
-[node name="PalayokPot_02" type="StaticBody2D" parent="Breakables" unique_id=1958871374]
-position = Vector2(1950, 212)
-script = ExtResource("9_j5f13")
-
-[node name="PalayokPot_03" type="StaticBody2D" parent="Breakables" unique_id=2007670204]
-position = Vector2(2750, 148)
-script = ExtResource("9_j5f13")
-
-[node name="PalayokPot_04" type="StaticBody2D" parent="Breakables" unique_id=693998668]
-position = Vector2(4000, 276)
-script = ExtResource("9_j5f13")
 
 [node name="Enemies" type="Node2D" parent="." unique_id=1621858601]
 

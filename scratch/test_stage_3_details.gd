@@ -59,8 +59,8 @@ func _ready() -> void:
 			var speed = sm.get_shader_parameter("wind_speed")
 			var strength = sm.get_shader_parameter("wind_strength")
 			print("  Tree Shader: wind_speed = %s, wind_strength = %s" % [speed, strength])
-			assert(speed >= 3.5, "Tree wind speed should be amplified in storm")
-			assert(strength >= 10.0, "Tree wind strength should be amplified in storm")
+			assert(speed >= 2.0, "Tree wind speed should be amplified in storm")
+			assert(strength >= 3.0, "Tree wind strength should be amplified in storm")
 			checked_tree = true
 			break
 	assert(checked_tree, "Must have verified at least one foliage tree shader")

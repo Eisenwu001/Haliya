@@ -1,6 +1,6 @@
 [gd_scene format=4 uid="uid://2yj7tachw3xp"]
 
-[ext_resource type="TileSet" uid="uid://2pqd42xgw7q0" path="res://scenes/tileset.tres" id="1_rmah6"]
+[ext_resource type="TileSet" uid="uid://caqafd7pfb2tm" path="res://scenes/tileset.tres" id="1_rmah6"]
 [ext_resource type="Shader" uid="uid://blr628t4av7i5" path="res://shaders/foliage_wind.gdshader" id="2_hgkvq"]
 [ext_resource type="Script" uid="uid://cpot0khbvfvyc" path="res://scripts/environment_torch.gd" id="8_676hk"]
 [ext_resource type="Script" uid="uid://b6v2malf4os04" path="res://scripts/aswang.gd" id="10_g60h4"]
@@ -12,8 +12,8 @@
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_dpm7u"]
 shader = ExtResource("2_hgkvq")
-shader_parameter/wind_speed = 1.8
-shader_parameter/wind_strength = 4.5
+shader_parameter/wind_speed = 1.4
+shader_parameter/wind_strength = 1.6
 shader_parameter/wind_detail = 2.0
 
 [node name="Level_1_1" type="Node2D" unique_id=1007108053]
@@ -187,10 +187,6 @@ script = ExtResource("pot_script")
 
 [node name="PalayokPot_03" type="StaticBody2D" parent="Breakables" unique_id=1789297916]
 position = Vector2(2499, 256)
-script = ExtResource("pot_script")
-
-[node name="PalayokPot_04" type="StaticBody2D" parent="Breakables" unique_id=2102468217]
-position = Vector2(3860, 282)
 script = ExtResource("pot_script")
 
 [node name="Enemies" type="Node2D" parent="." unique_id=271520931]

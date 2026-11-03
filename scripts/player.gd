@@ -5,6 +5,7 @@ const ProceduralAudioScript = preload("res://scripts/procedural_audio.gd")
 
 signal player_died
 signal hp_changed(current_hp: int, max_hp: int)
+signal armor_changed(current_armor: int, max_armor: int)
 signal stamina_changed(current_stamina: float, max_stamina: float)
 signal hit_landed(is_heavy: bool, hit_pos: Vector2)
 signal riposte_performed(hit_pos: Vector2)
@@ -28,8 +29,8 @@ enum State {
 }
 
 const GRAVITY: float = 980.0
-const WALK_SPEED: float = 120.0
-const RUN_SPEED: float = 240.0
+const WALK_SPEED: float = 95.0
+const RUN_SPEED: float = 185.0
 const DASH_SPEED: float = 380.0
 const JUMP_VELOCITY: float = -420.0
 const HIGH_FALL_THRESHOLD: float = 450.0
@@ -42,12 +43,29 @@ const DODGE_STAMINA_COST: float = 20.0
 # Health & Stamina Constants
 const MAX_HEALTH: int = 5
 const MAX_STAMINA: float = 100.0
-const IFRAME_DURATION: float = 1.2
+const ARMOR_REGEN_DELAY: float = 3.0
+const IFRAME_DURATION: float = 0.40
+const RUN_STAMINA_DRAIN_PER_SEC: float = 20.0
+const STAMINA_REGEN_DELAY: float = 0.60
+const ATTACK_LIGHT_STAMINA_COST: float = 11.0
+const ATTACK_HEAVY_STAMINA_COST: float = 18.0
+const EXHAUSTION_RECOVERY_THRESHOLD: float = 20.0
+const EXHAUSTION_REGEN_DELAY: float = 2.0 # Stops stamina regen for 2.0s when depleted to 0
+const EXHAUSTION_SLOW_DURATION: float = 1.0 # Character moves slow for 1.0s upon hitting 0
+const EXHAUSTION_SLOW_MULT: float = 0.60 # 60% of normal walk speed (~57 px/s)
 const RUN_KICK_STAMINA_COST: float = 35.0
 const GUARD_STAMINA_DRAIN_PER_SEC: float = 18.0
 const GUARD_BLOCK_STAMINA_COST: float = 20.0
 const STAMINA_REGEN_PER_SEC: float = 35.0
 const PARRY_WINDOW: float = 0.20 # Crisp 0.20s perfect parry timing window
+
+# Hollow Knight Platforming & Pogo Mechanics
+var spike_pogo_immunity_timer: float = 0.0
+var can_air_dash: bool = true
+var coyote_timer: float = 0.0
+var jump_buffer_timer: float = 0.0
+const COYOTE_DURATION: float = 0.12
+const JUMP_BUFFER_DURATION: float = 0.15
 
 # Magnetic Combat & Riposte Constants
 const MAGNETIC_ATTACK_RANGE: float = 95.0 # Max soft-lock acquisition distance in px
@@ -65,12 +83,101 @@ var max_fall_velocity: float = 0.0
 
 # Combat & Resource variables
 var current_hp: int = MAX_HEALTH
+var current_armor: int = 3
 var current_stamina: float = MAX_STAMINA
 var invulnerable_timer: float = 0.0
 var guard_time_held: float = 0.0
 var guard_break_timer: float = 0.0
 var hurt_flash_timer: float = 0.0
 var last_safe_ground_pos: Vector2 = Vector2(192.0, 300.0)
+var fall_death_y: float = 1400.0
+var is_exhausted: bool = false
+var stamina_regen_timer: float = 0.0
+var exhaustion_slow_timer: float = 0.0
+var armor_regen_timer: float = ARMOR_REGEN_DELAY
+var exhausted_sound_cooldown: float = 0.0
+var is_wading_in_mud: bool = false
+var armor_audio_player: AudioStreamPlayer2D
+
+# Roguelite Upgrades & Blessings
+var bonus_max_hp: int = 0
+var bonus_max_armor: int = 0
+var bonus_attack_damage: int = 0
+var stamina_regen_bonus: float = 0.0
+var dodge_cost_reduction: float = 0.0
+var move_speed_multiplier: float = 1.0
+var has_lunar_aegis: bool = false
+var has_vampiric_riposte: bool = false
+var has_lunar_shockwave: bool = false
+var lunar_shockwave_stacks: int = 0
+var has_ghost_dash: bool = false
+var has_eclipse_pogo: bool = false
+var has_celestial_respite: bool = false
+var has_iron_constitution: bool = false
+var has_parry_fortification: bool = false
+
+const LunarShockwaveScript = preload("res://scripts/lunar_shockwave.gd")
+const GhostDashDecoyScript = preload("res://scripts/ghost_dash_decoy.gd")
+const MetaProgression = preload("res://scripts/meta_progression.gd")
+
+func get_max_hp() -> int:
+	return MAX_HEALTH + bonus_max_hp
+
+func get_max_armor() -> int:
+	return maxi(1, int(round(get_max_hp() * (2.0 / 3.0)))) + bonus_max_armor
+
+func get_armor_regen_delay() -> float:
+	return 2.0 if has_celestial_respite else ARMOR_REGEN_DELAY
+
+func get_exhaustion_regen_delay() -> float:
+	return 1.3 if has_iron_constitution else EXHAUSTION_REGEN_DELAY
+
+func get_exhaustion_slow_duration() -> float:
+	return 0.5 if has_iron_constitution else EXHAUSTION_SLOW_DURATION
+
+func trigger_haptic_rumble(weak_magnitude: float = 0.5, strong_magnitude: float = 0.5, duration: float = 0.15) -> void:
+	if Input.get_connected_joypads().size() > 0:
+		Input.start_joy_vibration(0, weak_magnitude, strong_magnitude, duration)
+
+func trigger_hitstop(duration: float = 0.045) -> void:
+	Engine.time_scale = 0.05
+	if is_inside_tree() and get_tree():
+		get_tree().create_timer(duration, true, false, true).timeout.connect(func():
+			Engine.time_scale = 1.0
+		)
+
+func get_max_stamina() -> float:
+	return MAX_STAMINA
+
+func get_attack_damage_bonus() -> int:
+	return bonus_attack_damage
+
+func refresh_max_stats() -> void:
+	current_hp = mini(current_hp, get_max_hp())
+	hp_changed.emit(current_hp, get_max_hp())
+	current_armor = mini(current_armor, get_max_armor())
+	armor_changed.emit(current_armor, get_max_armor())
+
+func spawn_lunar_shockwave() -> void:
+	var wave = LunarShockwaveScript.new()
+	var dir = -1.0 if is_facing_left else 1.0
+	wave.direction = dir
+	wave.damage = 2 + get_attack_damage_bonus()
+	wave.global_position = global_position + Vector2(dir * 28.0, -28.0)
+	get_parent().add_child(wave)
+
+func _trigger_eclipse_pogo_burst() -> void:
+	VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -20), "ECLIPSE BURST", Color(1.0, 0.85, 0.3), 12, true)
+	var enemies = get_tree().get_nodes_in_group("enemies")
+	for e in enemies:
+		if is_instance_valid(e) and not e.get("is_dead"):
+			var dist = global_position.distance_to(e.global_position + Vector2(0, -30))
+			if dist <= 85.0:
+				var dir = 1.0 if e.global_position.x >= global_position.x else -1.0
+				if e.has_method("take_damage"):
+					e.take_damage(2 + get_attack_damage_bonus(), dir)
+				if e.has_method("deflect_by_parry"):
+					e.deflect_by_parry(dir)
 
 # Shift key double-tap tracking for Dash / Run Kick
 var last_shift_press_time: float = -10.0
@@ -143,12 +250,19 @@ var landing_dust_particles: CPUParticles2D
 var footstep_cycle_index: int = 0
 
 func _ready() -> void:
+	z_index = 5
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	MetaProgression.load_meta()
+	current_hp = get_max_hp()
+	current_armor = get_max_armor()
+	current_stamina = get_max_stamina()
+	armor_regen_timer = ARMOR_REGEN_DELAY
 	add_to_group("player")
 	ensure_input_actions()
 	setup_nodes()
 	load_haliya_animations()
 	set_state(State.IDLE)
+	apply_current_frame()
 
 func ensure_input_actions() -> void:
 	_register_action_key("move_left", [KEY_A, KEY_LEFT])
@@ -162,6 +276,22 @@ func ensure_input_actions() -> void:
 	_register_action_mouse("attack", MOUSE_BUTTON_LEFT)
 	_register_action_key("dodge", [KEY_ALT, KEY_C])
 	_register_action_key("interact", [KEY_E])
+
+	# Default Gamepad / Joypad mappings
+	_register_action_joypad_button("jump", JOY_BUTTON_A)
+	_register_action_joypad_button("attack", JOY_BUTTON_X)
+	_register_action_joypad_button("guard", JOY_BUTTON_B)
+	_register_action_joypad_button("dodge", JOY_BUTTON_Y)
+	_register_action_joypad_button("run", JOY_BUTTON_LEFT_SHOULDER)
+	_register_action_joypad_button("run", JOY_BUTTON_RIGHT_SHOULDER)
+	_register_action_joypad_button("move_left", JOY_BUTTON_DPAD_LEFT)
+	_register_action_joypad_button("move_right", JOY_BUTTON_DPAD_RIGHT)
+	_register_action_joypad_button("crouch", JOY_BUTTON_DPAD_DOWN)
+	_register_action_joypad_button("interact", JOY_BUTTON_Y)
+	_register_action_joypad_button("interact", JOY_BUTTON_DPAD_UP)
+
+	# Apply any customized bindings if saved in GameSettings
+	GameSettings.apply_keybinds()
 
 func _register_action_key(action_name: String, keycodes: Array) -> void:
 	if not InputMap.has_action(action_name):
@@ -178,7 +308,17 @@ func _register_action_mouse(action_name: String, button: MouseButton) -> void:
 	ev.button_index = button
 	InputMap.action_add_event(action_name, ev)
 
+func _register_action_joypad_button(action_name: String, button: JoyButton) -> void:
+	if not InputMap.has_action(action_name):
+		InputMap.add_action(action_name)
+	var ev := InputEventJoypadButton.new()
+	ev.button_index = button
+	InputMap.action_add_event(action_name, ev)
+
 func setup_nodes() -> void:
+	collision_layer = 2
+	collision_mask = 1
+	
 	sprite = Sprite2D.new()
 	sprite.name = "Sprite2D"
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -216,6 +356,11 @@ func setup_nodes() -> void:
 	hit_audio_player.name = "HitAudioPlayer"
 	hit_audio_player.volume_db = -2.0
 	add_child(hit_audio_player)
+
+	armor_audio_player = AudioStreamPlayer2D.new()
+	armor_audio_player.name = "ArmorAudioPlayer"
+	armor_audio_player.volume_db = -3.0
+	add_child(armor_audio_player)
 
 	# Footstep Dust Kickback Particles (At the feet, Y = 0)
 	footstep_dust_particles = CPUParticles2D.new()
@@ -287,56 +432,60 @@ func load_haliya_animations() -> void:
 	if dir:
 		dir.list_dir_begin()
 		var file_name = dir.get_next()
+		var seen_files: Dictionary = {}
 		while file_name != "":
-			if not dir.current_is_dir() and file_name.ends_with(".png"):
-				var full_path = asset_folder + "/" + file_name
-				var bname = file_name.get_basename()
-				
-				if "common_04_back" in file_name:
-					backstep_paths.append(full_path)
-				elif "run_kick" in file_name:
-					kick_paths.append(full_path)
-				elif "walk" in file_name:
-					walk_paths.append(full_path)
-				elif "run" in file_name:
-					run_paths.append(full_path)
-				elif "break" in file_name:
-					break_paths.append(full_path)
-				elif "jump_down" in file_name:
-					jump_fall_paths.append(full_path)
-				elif "jump_attack" in file_name:
-					air_attack_paths.append(full_path)
-				elif "jump" in file_name:
-					if bname in ["common_21_jump01", "common_21_jump02", "common_21_jump03", "common_21_jump04", "common_21_jump05"]:
-						jump_up_paths.append(full_path)
-				elif "idle_to_crouch" in file_name:
-					idle_to_crouch_paths.append(full_path)
-				elif "crouch_to_idle" in file_name:
-					crouch_to_idle_paths.append(full_path)
-				elif "idle_crouch" in file_name:
-					idle_crouch_paths.append(full_path)
-				elif "crounch_attack01" in file_name:
-					crouch_atk1_paths.append(full_path)
-				elif "crounch_attack02" in file_name:
-					crouch_atk2_paths.append(full_path)
-				elif "guard_stand" in file_name:
-					guard_stand_paths.append(full_path)
-				elif "guard_crouch" in file_name:
-					guard_crouch_paths.append(full_path)
-				elif "common_22_landing" in file_name:
-					landing_paths.append(full_path)
-				elif "idle" in file_name and "stand_A" in file_name:
-					idle_paths.append(full_path)
-				elif "cobination01" in file_name:
-					combo1_paths.append(full_path)
-				elif "cobination02" in file_name:
-					combo2_paths.append(full_path)
-				elif "cobination03" in file_name:
-					combo3_paths.append(full_path)
-				elif "cobination04" in file_name:
-					combo4_paths.append(full_path)
-				elif "knee" in file_name:
-					knee_paths.append(full_path)
+			if not dir.current_is_dir():
+				var clean_name = file_name.trim_suffix(".import").trim_suffix(".remap")
+				if clean_name.ends_with(".png") and not seen_files.has(clean_name):
+					seen_files[clean_name] = true
+					var full_path = asset_folder + "/" + clean_name
+					var bname = clean_name.get_basename()
+					
+					if "common_04_back" in clean_name:
+						backstep_paths.append(full_path)
+					elif "run_kick" in clean_name:
+						kick_paths.append(full_path)
+					elif "walk" in clean_name:
+						walk_paths.append(full_path)
+					elif "run" in clean_name:
+						run_paths.append(full_path)
+					elif "break" in clean_name:
+						break_paths.append(full_path)
+					elif "jump_down" in clean_name:
+						jump_fall_paths.append(full_path)
+					elif "jump_attack" in clean_name:
+						air_attack_paths.append(full_path)
+					elif "jump" in clean_name:
+						if bname in ["common_21_jump01", "common_21_jump02", "common_21_jump03", "common_21_jump04", "common_21_jump05"]:
+							jump_up_paths.append(full_path)
+					elif "idle_to_crouch" in clean_name:
+						idle_to_crouch_paths.append(full_path)
+					elif "crouch_to_idle" in clean_name:
+						crouch_to_idle_paths.append(full_path)
+					elif "idle_crouch" in clean_name:
+						idle_crouch_paths.append(full_path)
+					elif "crounch_attack01" in clean_name:
+						crouch_atk1_paths.append(full_path)
+					elif "crounch_attack02" in clean_name:
+						crouch_atk2_paths.append(full_path)
+					elif "guard_stand" in clean_name:
+						guard_stand_paths.append(full_path)
+					elif "guard_crouch" in clean_name:
+						guard_crouch_paths.append(full_path)
+					elif "common_22_landing" in clean_name:
+						landing_paths.append(full_path)
+					elif "idle" in clean_name and "stand_A" in clean_name:
+						idle_paths.append(full_path)
+					elif "cobination01" in clean_name:
+						combo1_paths.append(full_path)
+					elif "cobination02" in clean_name:
+						combo2_paths.append(full_path)
+					elif "cobination03" in clean_name:
+						combo3_paths.append(full_path)
+					elif "cobination04" in clean_name:
+						combo4_paths.append(full_path)
+					elif "knee" in clean_name:
+						knee_paths.append(full_path)
 			file_name = dir.get_next()
 	
 	walk_frames = load_and_sort_textures(walk_paths)
@@ -454,20 +603,73 @@ func _physics_process(delta: float) -> void:
 			var gleam_pulse = 1.0 + 0.35 * sin(riposte_timer * 18.0)
 			sprite.modulate = Color(gleam_pulse * 1.4, gleam_pulse * 1.3, 0.45, 1.0)
 
-	# Stamina Management
+	if exhaustion_slow_timer > 0.0 and current_state != State.RIPOSTE and invulnerable_timer <= 0.0 and hurt_flash_timer <= 0.0 and sprite:
+		var fatigue_pulse = 0.88 + 0.12 * sin(exhaustion_slow_timer * 14.0)
+		sprite.modulate = Color(fatigue_pulse, fatigue_pulse * 0.85, fatigue_pulse * 0.85, 1.0)
+
+	# Stamina Management & Recovery Timer
+	if stamina_regen_timer > 0.0:
+		stamina_regen_timer -= delta
+	if exhaustion_slow_timer > 0.0:
+		exhaustion_slow_timer -= delta
+	if exhausted_sound_cooldown > 0.0:
+		exhausted_sound_cooldown -= delta
+
 	if current_state == State.GUARD:
 		guard_time_held += delta
 		current_stamina = max(0.0, current_stamina - GUARD_STAMINA_DRAIN_PER_SEC * delta)
 		if current_stamina <= 0.0:
+			trigger_exhaustion()
 			# Guard Broken from holding too long!
 			trigger_guard_break(1.0 if is_facing_left else -1.0)
+		else:
+			stamina_regen_timer = STAMINA_REGEN_DELAY
+	elif current_state == State.RUN:
+		guard_time_held = 0.0
+		current_stamina = max(0.0, current_stamina - RUN_STAMINA_DRAIN_PER_SEC * delta)
+		if current_stamina <= 0.0:
+			trigger_exhaustion()
+			set_state(State.BREAK if abs(velocity.x) < 10.0 else State.WALK)
+		else:
+			stamina_regen_timer = STAMINA_REGEN_DELAY
 	else:
 		guard_time_held = 0.0
-		if current_state != State.RUN_KICK:
-			current_stamina = min(MAX_STAMINA, current_stamina + STAMINA_REGEN_PER_SEC * delta)
+		if current_state not in [State.RUN_KICK, State.DODGE]:
+			if stamina_regen_timer <= 0.0:
+				var regen_rate = STAMINA_REGEN_PER_SEC * (1.0 + stamina_regen_bonus)
+				current_stamina = min(get_max_stamina(), current_stamina + regen_rate * delta)
+
+	# Failsafe: if stamina dropped to 0 from any source, ensure exhaustion is triggered
+	if current_stamina <= 0.0 and not is_exhausted:
+		trigger_exhaustion()
+
+	# Recover from exhaustion once threshold is achieved
+	if is_exhausted and current_stamina >= EXHAUSTION_RECOVERY_THRESHOLD:
+		is_exhausted = false
 	
 	stamina_changed.emit(current_stamina, MAX_STAMINA)
 	
+	# Armor Passive Regeneration (1 point every 3.0s / 2.0s with celestial_respite)
+	if current_armor < get_max_armor():
+		armor_regen_timer -= delta
+		if armor_regen_timer <= 0.0:
+			current_armor += 1
+			armor_regen_timer = get_armor_regen_delay()
+			armor_changed.emit(current_armor, get_max_armor())
+			_play_armor_regen_effect()
+	else:
+		armor_regen_timer = get_armor_regen_delay()
+	
+	# Update Hollow Knight Platforming Timers
+	if spike_pogo_immunity_timer > 0.0:
+		spike_pogo_immunity_timer = max(0.0, spike_pogo_immunity_timer - delta)
+
+	if is_on_floor():
+		coyote_timer = COYOTE_DURATION
+		can_air_dash = true
+	else:
+		coyote_timer = max(0.0, coyote_timer - delta)
+
 	# Inputs
 	var crouch_held: bool = false
 	var guard_held: bool = false
@@ -486,26 +688,39 @@ func _physics_process(delta: float) -> void:
 		guard_held = Input.is_action_pressed("guard") or Input.is_key_pressed(KEY_K) or Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT)
 		attack_just_pressed = Input.is_action_just_pressed("attack")
 		jump_just_pressed = Input.is_action_just_pressed("jump")
-		is_run_key = Input.is_action_pressed("run") or Input.is_key_pressed(KEY_SHIFT)
+		var raw_run_key = Input.is_action_pressed("run") or Input.is_key_pressed(KEY_SHIFT)
+		is_run_key = raw_run_key and not is_exhausted
 		
 		# Handle Horizontal Movement Input
 		if Input.is_action_pressed("move_left") or Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
 			move_dir -= 1.0
 		if Input.is_action_pressed("move_right") or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 			move_dir += 1.0
+
+	# Jump Buffering
+	if jump_just_pressed:
+		jump_buffer_timer = JUMP_BUFFER_DURATION
+	elif jump_buffer_timer > 0.0:
+		jump_buffer_timer = max(0.0, jump_buffer_timer - delta)
 	
-	# Detect Shift key double-tap for DASH / RUN KICK
-	var is_shift_just_pressed = Input.is_action_just_pressed("run") or (is_run_key and not shift_key_was_pressed)
-	shift_key_was_pressed = is_run_key
+	# Detect Shift key press and exhaustion effort tick
+	var is_shift_just_pressed = Input.is_action_just_pressed("run") or ((Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("run")) and not shift_key_was_pressed)
+	shift_key_was_pressed = Input.is_key_pressed(KEY_SHIFT) or Input.is_action_pressed("run")
 	
-	if is_shift_just_pressed and is_on_floor() and current_state not in [State.LANDING, State.RUN_KICK, State.GUARD_BREAK, State.RIPOSTE]:
+	if is_exhausted and is_shift_just_pressed and exhausted_sound_cooldown <= 0.0:
+		exhausted_sound_cooldown = 0.35
+		play_exhausted_effort_tick()
+	
+	if not is_exhausted and is_shift_just_pressed and is_on_floor() and current_state not in [State.LANDING, State.RUN_KICK, State.GUARD_BREAK, State.RIPOSTE]:
 		var current_time = Time.get_ticks_msec() / 1000.0
 		if current_time - last_shift_press_time < 0.35:
 			# Double-click Shift -> Trigger RUN_KICK
 			start_run_kick(move_dir)
 		last_shift_press_time = current_time
 	
-	var target_speed = RUN_SPEED if is_run_key else WALK_SPEED
+	var mud_speed_mult = 0.60 if is_wading_in_mud else 1.0
+	var exhaustion_slow_mult = EXHAUSTION_SLOW_MULT if exhaustion_slow_timer > 0.0 else 1.0
+	var target_speed = (RUN_SPEED if is_run_key else WALK_SPEED) * move_speed_multiplier * mud_speed_mult * exhaustion_slow_mult
 	
 	# Un-crouch immediately when releasing crouch and pressing movement keys
 	if current_state == State.CROUCH and not crouch_held:
@@ -515,14 +730,18 @@ func _physics_process(delta: float) -> void:
 			crouch_sub_state = 2
 			current_frame_idx = 0
 	
-	# 0. Dodge & Evasive Backstep Input Handling
+	# 0. Dodge & Air Dash Input Handling (Hollow Knight Mothwing Dash)
 	var dodge_just_pressed = Input.is_action_just_pressed("dodge") or (Input.is_key_pressed(KEY_ALT) and not shift_key_was_pressed)
-	if dodge_just_pressed and is_on_floor() and current_state not in [State.LANDING, State.RUN_KICK, State.GUARD_BREAK, State.DODGE]:
-		if current_state == State.ATTACK:
-			var cur_frames = get_current_animation_frames()
-			if current_frame_idx >= int(cur_frames.size() * 0.35):
+	if dodge_just_pressed and current_state not in [State.LANDING, State.RUN_KICK, State.GUARD_BREAK, State.DODGE]:
+		if is_on_floor():
+			if current_state == State.ATTACK:
+				var cur_frames = get_current_animation_frames()
+				if current_frame_idx >= int(cur_frames.size() * 0.35):
+					start_dodge(move_dir)
+			else:
 				start_dodge(move_dir)
-		else:
+		elif can_air_dash:
+			can_air_dash = false
 			start_dodge(move_dir)
 
 	# 1. Guard Mechanic
@@ -543,10 +762,18 @@ func _physics_process(delta: float) -> void:
 			else:
 				trigger_attack(move_dir)
 	
-	# 3. Jump Input Handling
-	if jump_just_pressed and is_on_floor() and current_state not in [State.ATTACK, State.CROUCH_ATTACK, State.LANDING, State.GUARD, State.RUN_KICK, State.GUARD_BREAK, State.RIPOSTE, State.DODGE]:
+	# 3. Jump Input Handling (Hollow Knight Responsive Jump with Buffer & Coyote Time)
+	var can_jump = is_on_floor() or coyote_timer > 0.0
+	if jump_buffer_timer > 0.0 and can_jump and current_state not in [State.ATTACK, State.CROUCH_ATTACK, State.LANDING, State.GUARD, State.RUN_KICK, State.GUARD_BREAK, State.RIPOSTE, State.DODGE]:
+		jump_buffer_timer = 0.0
+		coyote_timer = 0.0
 		velocity.y = JUMP_VELOCITY
 		set_state(State.JUMP)
+
+	# 4. Hollow Knight Variable Jump Height (releasing jump early cuts rising velocity)
+	var jump_held = Input.is_action_pressed("jump") or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP)
+	if not jump_held and velocity.y < -140.0:
+		velocity.y = max(velocity.y * 0.55, -140.0)
 	
 	if move_dir != 0.0 and current_state not in [State.GUARD, State.CROUCH, State.LANDING, State.RUN_KICK, State.GUARD_BREAK, State.RIPOSTE, State.DODGE]:
 		is_facing_left = (move_dir < 0.0)
@@ -557,14 +784,15 @@ func _physics_process(delta: float) -> void:
 			dodge_timer -= delta
 			dodge_trail_timer -= delta
 			if dodge_trail_timer <= 0.0:
-				dodge_trail_timer = 0.06
+				dodge_trail_timer = 0.05
 				if sprite and sprite.texture:
-					VFX.spawn_ghost_trail(get_parent(), sprite.texture, global_position + sprite.position, sprite.scale, sprite.flip_h, Color(0.35, 0.65, 1.0, 0.65))
+					VFX.spawn_ghost_trail(get_parent(), sprite.texture, global_position + sprite.position, sprite.scale, sprite.flip_h, Color(0.35, 0.75, 1.0, 0.75))
 			
-			var speed_ratio = clampf(dodge_timer / DODGE_DURATION, 0.25, 1.0)
-			velocity.x = dodge_direction * DODGE_SPEED * speed_ratio
+			var speed_ratio = clampf(dodge_timer / DODGE_DURATION, 0.30, 1.0)
+			velocity.x = dodge_direction * (DODGE_SPEED * move_speed_multiplier) * speed_ratio
 			if not is_on_floor():
-				velocity.y += GRAVITY * delta
+				# Hollow Knight air dash holds horizontal glide
+				velocity.y = move_toward(velocity.y, 0.0, 1600.0 * delta)
 			if dodge_timer <= 0.0:
 				if is_on_floor():
 					set_state(State.WALK if move_dir != 0.0 else State.IDLE)
@@ -629,7 +857,7 @@ func _physics_process(delta: float) -> void:
 		sprite.flip_h = is_facing_left
 	
 	# Check hazards / fall death
-	if global_position.y > 600.0:
+	if global_position.y > fall_death_y:
 		player_died.emit()
 	
 	# Update State Machine & Transitions
@@ -645,14 +873,24 @@ func _physics_process(delta: float) -> void:
 func start_dodge(move_dir: float) -> void:
 	if current_state == State.DODGE:
 		return
-	if current_stamina < DODGE_STAMINA_COST:
+	var mud_dodge_mult = 2.0 if is_wading_in_mud else 1.0
+	var actual_dodge_cost = DODGE_STAMINA_COST * (1.0 - dodge_cost_reduction) * mud_dodge_mult
+	if is_exhausted or current_stamina < actual_dodge_cost:
+		if is_exhausted and exhausted_sound_cooldown <= 0.0:
+			exhausted_sound_cooldown = 0.35
+			play_exhausted_effort_tick()
 		return
 	
-	current_stamina -= DODGE_STAMINA_COST
+	current_stamina = max(0.0, current_stamina - actual_dodge_cost)
+	if current_stamina <= 0.0:
+		trigger_exhaustion()
+	else:
+		stamina_regen_timer = STAMINA_REGEN_DELAY
 	stamina_changed.emit(current_stamina, MAX_STAMINA)
 	
+	
 	dodge_timer = DODGE_DURATION
-	invulnerable_timer = DODGE_IFRAME_DURATION
+	invulnerable_timer = DODGE_IFRAME_DURATION + (0.06 if has_lunar_aegis else 0.0)
 	
 	if move_dir != 0.0:
 		dodge_direction = move_dir
@@ -663,6 +901,11 @@ func start_dodge(move_dir: float) -> void:
 		
 	set_state(State.DODGE)
 	dodge_trail_timer = 0.0
+	if has_ghost_dash and sprite and sprite.texture:
+		var decoy = GhostDashDecoyScript.new()
+		decoy.global_position = global_position
+		decoy.setup(sprite.texture, sprite.flip_h, sprite.hframes, sprite.vframes, sprite.frame)
+		get_parent().add_child(decoy)
 	
 	if swing_audio_player:
 		swing_audio_player.stream = ProceduralAudioScript.get_dodge_whoosh()
@@ -676,20 +919,29 @@ func start_dodge(move_dir: float) -> void:
 func start_run_kick(move_dir: float) -> void:
 	if current_state == State.RUN_KICK:
 		return
-	if current_stamina < RUN_KICK_STAMINA_COST:
+	if is_exhausted or current_stamina < RUN_KICK_STAMINA_COST:
 		# Not enough stamina for Flying Kick - perform normal ground attack instead
 		trigger_attack(move_dir)
 		return
 	
-	current_stamina -= RUN_KICK_STAMINA_COST
+	current_stamina = max(0.0, current_stamina - RUN_KICK_STAMINA_COST)
+	if current_stamina <= 0.0:
+		trigger_exhaustion()
+	else:
+		stamina_regen_timer = STAMINA_REGEN_DELAY
 	stamina_changed.emit(current_stamina, MAX_STAMINA)
+	
 	kick_start_x = global_position.x
 	kick_direction = move_dir if move_dir != 0.0 else (-1.0 if is_facing_left else 1.0)
 	is_facing_left = (kick_direction < 0.0)
 	set_state(State.RUN_KICK)
+	if has_lunar_shockwave:
+		spawn_lunar_shockwave()
 	play_kick_launch_sfx()
 
 func find_magnetic_attack_target(move_dir: float) -> CharacterBody2D:
+	if not is_inside_tree() or not get_tree():
+		return null
 	var enemies = get_tree().get_nodes_in_group("enemies")
 	if enemies.is_empty():
 		return null
@@ -733,6 +985,16 @@ func start_attack_action(move_dir: float = 0.0) -> void:
 	hit_enemies_this_swing.clear()
 	set_state(State.ATTACK)
 	var is_heavy = is_air_attack or (current_combo_idx == 3)
+	if has_lunar_shockwave and is_heavy:
+		spawn_lunar_shockwave()
+	var atk_cost = ATTACK_HEAVY_STAMINA_COST if is_heavy else ATTACK_LIGHT_STAMINA_COST
+	current_stamina = max(0.0, current_stamina - atk_cost)
+	if current_stamina <= 0.0:
+		trigger_exhaustion()
+	else:
+		stamina_regen_timer = STAMINA_REGEN_DELAY
+	stamina_changed.emit(current_stamina, MAX_STAMINA)
+	
 	play_swing_sfx(is_heavy)
 	
 	if is_air_attack:
@@ -757,6 +1019,12 @@ func start_attack_action(move_dir: float = 0.0) -> void:
 func trigger_attack(move_dir: float = 0.0) -> void:
 	if riposte_timer > 0.0 and is_instance_valid(riposte_target):
 		trigger_riposte()
+		return
+
+	if is_exhausted or current_stamina < ATTACK_LIGHT_STAMINA_COST:
+		if is_exhausted and exhausted_sound_cooldown <= 0.0:
+			exhausted_sound_cooldown = 0.35
+			play_exhausted_effort_tick()
 		return
 
 	if current_state == State.ATTACK:
@@ -786,12 +1054,59 @@ func trigger_riposte() -> void:
 	play_swing_sfx(true)
 
 func trigger_crouch_attack() -> void:
+	if is_exhausted or current_stamina < ATTACK_LIGHT_STAMINA_COST:
+		if is_exhausted and exhausted_sound_cooldown <= 0.0:
+			exhausted_sound_cooldown = 0.35
+			play_exhausted_effort_tick()
+		return
 	if current_state == State.CROUCH_ATTACK:
 		attack_queued = true
 		return
+	current_stamina = max(0.0, current_stamina - ATTACK_LIGHT_STAMINA_COST)
+	if current_stamina <= 0.0:
+		trigger_exhaustion()
+	else:
+		stamina_regen_timer = STAMINA_REGEN_DELAY
+	stamina_changed.emit(current_stamina, MAX_STAMINA)
+	
 	crouch_combo_idx = 0
 	set_state(State.CROUCH_ATTACK)
 	play_swing_sfx(false)
+
+func trigger_exhaustion() -> void:
+	if not is_exhausted:
+		is_exhausted = true
+		exhaustion_slow_timer = get_exhaustion_slow_duration()
+		stamina_regen_timer = get_exhaustion_regen_delay()
+		play_exhausted_gasp()
+		_spawn_exhausted_vfx()
+	else:
+		stamina_regen_timer = max(stamina_regen_timer, get_exhaustion_regen_delay())
+
+func play_exhausted_gasp() -> void:
+	if not is_inside_tree() or not footstep_audio_player:
+		return
+	var stream = ProceduralAudioScript.get_exhausted_gasp_sfx()
+	if stream:
+		footstep_audio_player.stream = stream
+		footstep_audio_player.pitch_scale = randf_range(0.96, 1.04)
+		footstep_audio_player.volume_db = 1.0
+		footstep_audio_player.play()
+
+func _spawn_exhausted_vfx() -> void:
+	if not is_inside_tree() or not get_parent():
+		return
+	var head_pos = global_position + Vector2(0, -48.0)
+	VFX.spawn_exhausted_sweat(get_parent(), head_pos)
+	VFX.spawn_floating_text(get_parent(), head_pos + Vector2(0, -10.0), "EXHAUSTED!", Color(1.0, 0.4, 0.4, 0.95), 13, false)
+
+func play_exhausted_effort_tick() -> void:
+	if footstep_audio_player:
+		footstep_audio_player.stream = ProceduralAudioScript.get_exhausted_effort_tick()
+		footstep_audio_player.pitch_scale = randf_range(0.95, 1.05)
+		footstep_audio_player.volume_db = 0.0
+		footstep_audio_player.play()
+
 
 func detect_current_surface() -> String:
 	if not is_inside_tree():
@@ -1022,10 +1337,17 @@ func update_animation(delta: float) -> void:
 				if current_frame_idx < frames.size() - 1:
 					current_frame_idx += 1
 				else:
-					if attack_queued and crouch_combo_idx == 0:
+					if attack_queued and crouch_combo_idx == 0 and not is_exhausted:
 						attack_queued = false
 						crouch_combo_idx = 1
 						current_frame_idx = 0
+						current_stamina = max(0.0, current_stamina - ATTACK_HEAVY_STAMINA_COST)
+						if current_stamina <= 0.0:
+							trigger_exhaustion()
+						else:
+							stamina_regen_timer = STAMINA_REGEN_DELAY
+						stamina_changed.emit(current_stamina, MAX_STAMINA)
+	
 						hit_enemies_this_swing.clear()
 						apply_current_frame()
 						play_swing_sfx(false)
@@ -1051,7 +1373,7 @@ func update_animation(delta: float) -> void:
 					return
 				
 				# Early combo chaining during recovery frames
-				if is_recovery and attack_queued and not is_air_attack:
+				if is_recovery and attack_queued and not is_air_attack and not is_exhausted:
 					attack_queued = false
 					current_combo_idx = (current_combo_idx + 1) % ground_attack_combos.size()
 					current_frame_idx = 0
@@ -1063,7 +1385,7 @@ func update_animation(delta: float) -> void:
 				if current_frame_idx < frames.size() - 1:
 					current_frame_idx += 1
 				else:
-					if attack_queued and not is_air_attack:
+					if attack_queued and not is_air_attack and not is_exhausted:
 						attack_queued = false
 						current_combo_idx = (current_combo_idx + 1) % ground_attack_combos.size()
 						current_frame_idx = 0
@@ -1157,6 +1479,8 @@ func get_current_animation_frames() -> Array[Texture2D]:
 				return jump_fall_frames
 			return jump_up_frames
 		State.ATTACK:
+			if ground_attack_combos.is_empty():
+				return []
 			if is_air_attack:
 				return jump_attack_frames if not jump_attack_frames.is_empty() else ground_attack_combos[0]
 			else:
@@ -1220,11 +1544,13 @@ func check_attack_hit_enemies() -> void:
 			var knock_dir: float = -1.0 if is_facing_left else 1.0
 			var is_riposte = (current_state == State.RIPOSTE)
 			var is_heavy = (current_state == State.RUN_KICK) or is_riposte
-			var damage_amount = RIPOSTE_DAMAGE if is_riposte else (2 if is_heavy else 1)
+			var damage_amount = (RIPOSTE_DAMAGE if is_riposte else (2 if is_heavy else 1)) + get_attack_damage_bonus()
 			
 			hit_landed.emit(is_heavy, enemy.global_position)
 			if is_riposte:
 				riposte_performed.emit(enemy.global_position)
+				if has_vampiric_riposte:
+					heal(1)
 
 			var is_counter_kill = is_riposte or (enemy.get("is_stunned_vulnerable") == true)
 			var hit_center = enemy.global_position + Vector2(0, -42.0)
@@ -1240,8 +1566,48 @@ func check_attack_hit_enemies() -> void:
 			else:
 				play_hit_sfx(is_counter_kill or is_heavy)
 			
+			# Hollow Knight-style aerial slash pogo bounce when striking an enemy from above
+			if is_air_attack and dy > 8.0:
+				var pogo_bounce = -465.0 if has_eclipse_pogo else -390.0
+				velocity.y = min(velocity.y, pogo_bounce)
+				max_fall_velocity = 0.0
+				can_air_dash = true
+				restore_stamina(20.0)
+				VFX.spawn_parry_clash(get_parent(), global_position + Vector2(0.0, 16.0))
+				if has_eclipse_pogo:
+					_trigger_eclipse_pogo_burst()
+			
 			if enemy.has_method("take_damage"):
 				enemy.take_damage(damage_amount, knock_dir)
+	
+	# Check Resonant Pogo Crystals (Hollow Knight mid-air slash bounce)
+	var pogo_crystals = get_tree().get_nodes_in_group("pogo_crystals")
+	for crystal in pogo_crystals:
+		if not is_instance_valid(crystal) or crystal in hit_enemies_this_swing:
+			continue
+		var cdx = crystal.global_position.x - global_position.x
+		var cdy = crystal.global_position.y - global_position.y
+		if abs(cdx) <= 58.0 and abs(cdy) <= 54.0:
+			hit_enemies_this_swing.append(crystal)
+			if crystal.has_method("trigger_pogo_bounce"):
+				if crystal.trigger_pogo_bounce(self):
+					can_air_dash = true
+					VFX.spawn_parry_clash(get_parent(), crystal.global_position + Vector2(0.0, -14.0))
+
+	# Check Subterranean Spike Hazards (Hollow Knight Downward Nail Strike Pogo)
+	if is_air_attack:
+		var spikes = get_tree().get_nodes_in_group("spike_hazards")
+		for spike in spikes:
+			if not is_instance_valid(spike) or spike in hit_enemies_this_swing:
+				continue
+			var s_pos = spike.global_position
+			var s_w = spike.hazard_width if "hazard_width" in spike else 160.0
+			var dx = global_position.x - (s_pos.x + s_w * 0.5)
+			var dy = (s_pos.y) - global_position.y
+			if abs(dx) <= (s_w * 0.5 + 24.0) and dy >= -25.0 and dy <= 65.0:
+				hit_enemies_this_swing.append(spike)
+				trigger_spike_pogo(spike)
+				break
 	
 	# Check breakable objects (clay pots, etc.)
 	var breakables = get_tree().get_nodes_in_group("breakables")
@@ -1262,24 +1628,84 @@ func check_attack_hit_enemies() -> void:
 			if item.has_method("smash"):
 				item.smash(Vector2(knock_dir, -0.6))
 
+func trigger_spike_pogo(_spike: Node2D = null) -> void:
+	velocity.y = min(velocity.y, -435.0)
+	max_fall_velocity = 0.0
+	can_air_dash = true
+	spike_pogo_immunity_timer = 0.35
+	restore_stamina(28.0)
+	if is_exhausted:
+		is_exhausted = false
+	
+	if swing_audio_player:
+		swing_audio_player.stream = ProceduralAudioScript.get_parry_clash()
+		swing_audio_player.pitch_scale = randf_range(1.25, 1.40)
+		swing_audio_player.volume_db = 1.0
+		swing_audio_player.play()
+	
+	var clash_pos = global_position + Vector2(0.0, 16.0)
+	VFX.spawn_parry_clash(get_parent(), clash_pos)
+	
+	# Momentary hitstop for satisfying Hollow Knight nail impact feel
+	var main_node = get_tree().root.get_node_or_null("Main") if is_inside_tree() else null
+	if is_instance_valid(main_node) and main_node.has_method("trigger_hit_stop"):
+		main_node.trigger_hit_stop(0.045)
+	elif is_inside_tree():
+		Engine.time_scale = 0.15
+		get_tree().create_timer(0.045, true, false, true).timeout.connect(func():
+			if not is_instance_valid(main_node):
+				Engine.time_scale = 1.0
+		)
+
+var is_blocking: bool:
+	get:
+		return current_state == State.GUARD
+
+func consume_stamina(amount: float) -> void:
+	current_stamina = maxf(0.0, current_stamina - amount)
+	if current_stamina <= 0.0:
+		trigger_exhaustion()
+	else:
+		stamina_regen_timer = STAMINA_REGEN_DELAY
+	stamina_changed.emit(current_stamina, get_max_stamina())
+
 func heal(amount: int = 1) -> void:
-	current_hp = min(MAX_HEALTH, current_hp + amount)
-	hp_changed.emit(current_hp, MAX_HEALTH)
+	current_hp = min(get_max_hp(), current_hp + amount)
+	hp_changed.emit(current_hp, get_max_hp())
 	if sprite:
 		sprite.modulate = Color(0.5, 1.8, 0.6, 1.0)
 		get_tree().create_timer(0.25).timeout.connect(func(): if sprite: sprite.modulate = Color(1, 1, 1, 1))
 
 func restore_stamina(amount: float = 60.0) -> void:
-	current_stamina = min(MAX_STAMINA, current_stamina + amount)
-	stamina_changed.emit(current_stamina, MAX_STAMINA)
+	current_stamina = min(get_max_stamina(), current_stamina + amount)
+	if current_stamina >= EXHAUSTION_RECOVERY_THRESHOLD:
+		is_exhausted = false
+		exhaustion_slow_timer = 0.0
+	stamina_changed.emit(current_stamina, get_max_stamina())
 	if sprite:
 		sprite.modulate = Color(1.8, 1.6, 0.4, 1.0)
-		get_tree().create_timer(0.25).timeout.connect(func(): if sprite: sprite.modulate = Color(1, 1, 1, 1))
+		if is_inside_tree():
+			get_tree().create_timer(0.25).timeout.connect(func(): if sprite: sprite.modulate = Color(1, 1, 1, 1))
 
 func respawn_at_safe_ledge(damage: int = 1) -> void:
-	current_hp = max(0, current_hp - damage)
-	hp_changed.emit(current_hp, MAX_HEALTH)
+	armor_regen_timer = get_armor_regen_delay()
+	var hp_damage = damage
+	if current_armor > 0:
+		var absorbed = mini(current_armor, damage)
+		current_armor -= absorbed
+		hp_damage = damage - absorbed
+		armor_changed.emit(current_armor, get_max_armor())
+		if current_armor == 0 and absorbed > 0:
+			_on_armor_broken()
+		else:
+			_play_armor_hit_effect()
+
+	if hp_damage > 0:
+		current_hp = max(0, current_hp - hp_damage)
+		hp_changed.emit(current_hp, get_max_hp())
+
 	damage_taken.emit(damage, false)
+	trigger_haptic_rumble(0.6, 0.6, 0.20)
 	if current_hp <= 0:
 		player_died.emit()
 	else:
@@ -1293,13 +1719,34 @@ func respawn_at_safe_ledge(damage: int = 1) -> void:
 func take_damage(amount: int, knockback_dir: float = 0.0) -> void:
 	if invulnerable_timer > 0.0 or current_hp <= 0:
 		return
-	current_hp = max(0, current_hp - amount)
-	hp_changed.emit(current_hp, MAX_HEALTH)
-	damage_taken.emit(amount, false)
 
-	if sprite:
-		sprite.modulate = Color(1.0, 0.25, 0.25, 1.0)
-	hurt_flash_timer = 0.25
+	armor_regen_timer = get_armor_regen_delay()
+	var hp_damage = amount
+	var was_armor_broken = false
+	if current_armor > 0:
+		var absorbed = mini(current_armor, amount)
+		current_armor -= absorbed
+		hp_damage = amount - absorbed
+		armor_changed.emit(current_armor, get_max_armor())
+		if current_armor == 0 and absorbed > 0:
+			was_armor_broken = true
+			_on_armor_broken()
+		else:
+			_play_armor_hit_effect()
+
+	if hp_damage > 0:
+		current_hp = max(0, current_hp - hp_damage)
+		hp_changed.emit(current_hp, get_max_hp())
+		if sprite and not was_armor_broken:
+			sprite.modulate = Color(1.0, 0.25, 0.25, 1.0)
+		hurt_flash_timer = 0.25
+	else:
+		if sprite and not was_armor_broken:
+			sprite.modulate = Color(0.4, 0.9, 1.8, 1.0)
+		hurt_flash_timer = 0.18
+
+	damage_taken.emit(amount, false)
+	trigger_haptic_rumble(0.6, 0.6, 0.18)
 
 	velocity.x = knockback_dir * 180.0
 	velocity.y = -140.0
@@ -1328,19 +1775,36 @@ func take_damage_from_enemy(amount: int, enemy_dir: float, attacker_node: Node =
 				sprite.flip_h = is_facing_left
 
 	if current_state == State.GUARD and is_facing_enemy:
-		# 1. PERFECT BLOCK / PARRY (first 0.20s of guard)
-		if guard_time_held <= PARRY_WINDOW:
+		# 1. PERFECT BLOCK / PARRY (first 0.20s of guard, or +0.05s with aegis)
+		var parry_window = PARRY_WINDOW + (0.05 if has_lunar_aegis else 0.0)
+		if guard_time_held <= parry_window:
 			# Perfect Parry: 0 damage, 0 stamina cost, +20 bonus stamina surge
-			current_stamina = min(MAX_STAMINA, current_stamina + 20.0)
+			current_stamina = min(get_max_stamina(), current_stamina + 20.0)
+			if current_stamina >= EXHAUSTION_RECOVERY_THRESHOLD:
+				is_exhausted = false
+				exhaustion_slow_timer = 0.0
 			stamina_changed.emit(current_stamina, MAX_STAMINA)
+	
+			if has_vampiric_riposte:
+				heal(1)
 			
+			# Bulawan Ward / Parry Fortification: replenish +1 armor on perfect parry
+			if has_parry_fortification and current_armor < get_max_armor():
+				current_armor = mini(current_armor + 1, get_max_armor())
+				armor_changed.emit(current_armor, get_max_armor())
+				_play_armor_regen_effect()
+			
+			trigger_haptic_rumble(0.8, 1.0, 0.22)
+			trigger_hitstop(0.08)
+
 			# Open critical Riposte window!
 			riposte_timer = RIPOSTE_WINDOW_DURATION
 			riposte_target = attacker_node as CharacterBody2D if attacker_node is CharacterBody2D else null
 			
 			# Golden shield clash flash
-			sprite.modulate = Color(2.0, 1.8, 0.5, 1.0)
-			get_tree().create_timer(0.25).timeout.connect(func(): if sprite and current_state != State.RIPOSTE: sprite.modulate = Color(1, 1, 1, 1))
+			if sprite:
+				sprite.modulate = Color(2.0, 1.8, 0.5, 1.0)
+				get_tree().create_timer(0.25).timeout.connect(func(): if sprite and current_state != State.RIPOSTE: sprite.modulate = Color(1, 1, 1, 1))
 			
 			# Light pushback
 			velocity.x = enemy_dir * 30.0
@@ -1358,19 +1822,37 @@ func take_damage_from_enemy(amount: int, enemy_dir: float, attacker_node: Node =
 			return
 		else:
 			# 2. IMPERFECT BLOCK (Holding guard early / long guard)
-			# Player feels the hit: 1 chip damage, 35 stamina loss (block meter drain)
-			current_hp = max(0, current_hp - 1)
-			hp_changed.emit(current_hp, MAX_HEALTH)
+			# Player feels the hit: 1 chip damage (or 0 with lunar_aegis), 35 stamina loss (block meter drain)
+			var chip_dmg = 0 if has_lunar_aegis else 1
+			if chip_dmg > 0:
+				armor_regen_timer = get_armor_regen_delay()
+				if current_armor > 0:
+					current_armor -= 1
+					armor_changed.emit(current_armor, get_max_armor())
+					if current_armor == 0:
+						_on_armor_broken()
+					else:
+						_play_armor_hit_effect()
+				else:
+					current_hp = max(0, current_hp - chip_dmg)
+					hp_changed.emit(current_hp, get_max_hp())
+			
+			trigger_haptic_rumble(0.4, 0.3, 0.12)
 			
 			current_stamina = max(0.0, current_stamina - 35.0)
+			if current_stamina <= 0.0:
+				trigger_exhaustion()
+			else:
+				stamina_regen_timer = STAMINA_REGEN_DELAY
 			stamina_changed.emit(current_stamina, MAX_STAMINA)
 			
 			# Spawn Guard Impact Barrier VFX in front of player's shield
 			var guard_pos = global_position + Vector2(-16.0 if is_facing_left else 16.0, -18.0)
 			VFX.spawn_guard_impact(get_parent(), guard_pos)
 
-			# Light chip blood spray
-			VFX.spawn_blood_splatter(get_parent(), global_position + Vector2(0, -42.0), Vector2(-enemy_dir, -0.3), 0.6, true)
+			# Light chip blood spray only if HP was hit
+			if chip_dmg > 0 and current_armor <= 0:
+				VFX.spawn_blood_splatter(get_parent(), global_position + Vector2(0, -42.0), Vector2(-enemy_dir, -0.3), 0.6, true)
 			
 			if current_stamina <= 0.0:
 				# Block meter depleted -> GUARD BREAK!
@@ -1390,19 +1872,42 @@ func take_damage_from_enemy(amount: int, enemy_dir: float, attacker_node: Node =
 			return
 	
 	# 3. UNGUARDED HIT: Full damage, heavy knockback, full i-frames
-	current_hp = max(0, current_hp - amount)
-	hp_changed.emit(current_hp, MAX_HEALTH)
-	damage_taken.emit(amount, false)
+	armor_regen_timer = get_armor_regen_delay()
+	trigger_haptic_rumble(0.65, 0.65, 0.18)
+	var hp_damage = amount
+	var was_armor_broken = false
+	if current_armor > 0:
+		var absorbed = mini(current_armor, amount)
+		current_armor -= absorbed
+		hp_damage = amount - absorbed
+		armor_changed.emit(current_armor, get_max_armor())
+		if current_armor == 0 and absorbed > 0:
+			was_armor_broken = true
+			_on_armor_broken()
+		else:
+			_play_armor_hit_effect()
 
-	# Visceral Player Blood Burst & Slash VFX
 	var blood_pos = global_position + Vector2(0, -42.0)
-	VFX.spawn_blood_slash(get_parent(), blood_pos, enemy_dir > 0, Vector2(1.1, 1.1))
-	VFX.spawn_blood_splatter(get_parent(), blood_pos, Vector2(-enemy_dir, -0.5), 1.5, true)
-	
-	# Crimson damage flash
-	sprite.modulate = Color(1.0, 0.25, 0.25, 1.0)
-	hurt_flash_timer = 0.22
-	
+	if hp_damage > 0:
+		current_hp = max(0, current_hp - hp_damage)
+		hp_changed.emit(current_hp, get_max_hp())
+		damage_taken.emit(amount, false)
+
+		# Visceral Player Blood Burst & Slash VFX
+		VFX.spawn_blood_slash(get_parent(), blood_pos, enemy_dir > 0, Vector2(1.1, 1.1))
+		VFX.spawn_blood_splatter(get_parent(), blood_pos, Vector2(-enemy_dir, -0.5), 1.5, true)
+		
+		# Crimson damage flash
+		if sprite and not was_armor_broken:
+			sprite.modulate = Color(1.0, 0.25, 0.25, 1.0)
+		hurt_flash_timer = 0.22
+	else:
+		# Completely absorbed by armor!
+		damage_taken.emit(0, false)
+		if sprite and not was_armor_broken:
+			sprite.modulate = Color(0.4, 0.9, 1.8, 1.0)
+		hurt_flash_timer = 0.18
+
 	# Knockback impulse
 	velocity.x = enemy_dir * 180.0
 	velocity.y = -140.0
@@ -1415,18 +1920,25 @@ func take_damage_from_enemy(amount: int, enemy_dir: float, attacker_node: Node =
 
 func trigger_guard_break(enemy_dir: float) -> void:
 	set_state(State.GUARD_BREAK)
-	guard_break_timer = 0.60
+	guard_break_timer = 0.75
 	velocity.x = enemy_dir * 160.0
 	velocity.y = -80.0
 	if is_instance_valid(sprite):
 		sprite.modulate = Color(1.0, 0.35, 0.35, 1.0)
-	invulnerable_timer = 0.60
+	invulnerable_timer = 0.20
 	VFX.spawn_floating_text(get_parent(), global_position + Vector2(0, -56.0), "GUARD BROKEN!", Color(0.4, 0.6, 1.0), 15, true)
 
-func reset_combat_state() -> void:
+func reset_combat_state(restore_hp: bool = true) -> void:
 	is_locked_transition = false
-	current_hp = MAX_HEALTH
-	current_stamina = MAX_STAMINA
+	is_wading_in_mud = false
+	if restore_hp:
+		current_hp = get_max_hp()
+		current_armor = get_max_armor()
+	current_stamina = get_max_stamina()
+	is_exhausted = false
+	exhaustion_slow_timer = 0.0
+	stamina_regen_timer = 0.0
+	armor_regen_timer = ARMOR_REGEN_DELAY
 	invulnerable_timer = 0.0
 	guard_time_held = 0.0
 	guard_break_timer = 0.0
@@ -1438,8 +1950,50 @@ func reset_combat_state() -> void:
 	attack_whiff_step_speed = 0.0
 	if sprite:
 		sprite.modulate = Color(1, 1, 1, 1)
-	hp_changed.emit(current_hp, MAX_HEALTH)
-	stamina_changed.emit(current_stamina, MAX_STAMINA)
+	hp_changed.emit(current_hp, get_max_hp())
+	armor_changed.emit(current_armor, get_max_armor())
+	stamina_changed.emit(current_stamina, get_max_stamina())
+
+func _play_armor_hit_effect() -> void:
+	if is_inside_tree() and is_instance_valid(armor_audio_player):
+		armor_audio_player.stream = ProceduralAudioScript.get_armor_deflect_sfx()
+		armor_audio_player.play()
+	var hit_pos = global_position + Vector2(0, -32.0)
+	if get_parent():
+		VFX.spawn_armor_impact(get_parent(), hit_pos)
+		VFX.spawn_floating_text(get_parent(), hit_pos + Vector2(0, -10), "ARMOR DEFLECT", Color(0.4, 0.85, 1.2, 0.95), 12)
+	if sprite:
+		sprite.modulate = Color(0.5, 1.2, 2.0, 1.0)
+		if is_inside_tree():
+			get_tree().create_timer(0.18).timeout.connect(func(): if sprite and hurt_flash_timer <= 0.0: sprite.modulate = Color(1, 1, 1, 1))
+
+func _on_armor_broken() -> void:
+	trigger_haptic_rumble(0.9, 0.9, 0.25)
+	trigger_hitstop(0.06)
+	if is_inside_tree() and is_instance_valid(armor_audio_player):
+		armor_audio_player.stream = ProceduralAudioScript.get_armor_break_sfx()
+		armor_audio_player.play()
+	var break_pos = global_position + Vector2(0, -32.0)
+	if get_parent():
+		VFX.spawn_armor_break(get_parent(), break_pos)
+		VFX.spawn_floating_text(get_parent(), break_pos + Vector2(0, -15), "ARMOR SHATTERED!", Color(0.3, 0.9, 1.5, 1.0), 14, true)
+	if sprite:
+		sprite.modulate = Color(0.3, 1.0, 1.8, 1.0)
+		if is_inside_tree():
+			get_tree().create_timer(0.25).timeout.connect(func(): if sprite and hurt_flash_timer <= 0.0: sprite.modulate = Color(1, 1, 1, 1))
+
+func _play_armor_regen_effect() -> void:
+	if is_inside_tree() and is_instance_valid(armor_audio_player):
+		armor_audio_player.stream = ProceduralAudioScript.get_armor_regen_sfx()
+		armor_audio_player.play()
+	var regen_pos = global_position + Vector2(0, -28.0)
+	if get_parent():
+		VFX.spawn_armor_regen_pulse(get_parent(), regen_pos)
+		VFX.spawn_floating_text(get_parent(), regen_pos + Vector2(0, -10), "ARMOR +1", Color(0.45, 0.95, 1.4, 0.95), 11)
+	if sprite and hurt_flash_timer <= 0.0:
+		sprite.modulate = Color(0.6, 1.1, 1.6, 1.0)
+		if is_inside_tree():
+			get_tree().create_timer(0.20).timeout.connect(func(): if sprite and hurt_flash_timer <= 0.0: sprite.modulate = Color(1, 1, 1, 1))
 
 func start_walk_off() -> void:
 	is_locked_transition = true
