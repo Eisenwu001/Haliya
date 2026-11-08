@@ -211,14 +211,22 @@ func test_main_hud_integration() -> void:
 
 	# Call setup_ui()
 	main.setup_ui()
-	_assert(is_instance_valid(main.hp_shield_clip), "Shield overlay clip created inside health bar")
-	_assert(is_instance_valid(main.hp_text_label), "Health & shield text label created in setup_ui")
+	_assert(is_instance_valid(main.shield_wards_container), "Shield wards container created in setup_ui")
+	_assert(is_instance_valid(main.hp_pips_container), "HP pips container created in setup_ui")
 
-	# Shield active: (+2) appended
+	# Helper to count non-shattering active wards
+	var count_active_wards = func() -> int:
+		var cnt = 0
+		for c in main.shield_wards_container.get_children():
+			if is_instance_valid(c) and not c.has_meta("is_shattering") and not c.is_queued_for_deletion():
+				cnt += 1
+		return cnt
+
+	# Shield active: 2 wards
 	main._on_player_armor_changed(2, 3)
-	_assert(main.hp_text_label.text == "HP  5 / 5  (+2)", "HUD displays shielded status: 'HP  5 / 5  (+2)'")
+	_assert(count_active_wards.call() == 2, "HUD displays 2 active shield wards")
 
-	# Shield depleted: returns to standard HP display
+	# Shield depleted: 0 wards
 	main._on_player_armor_changed(0, 3)
-	_assert(main.hp_text_label.text == "HP  5 / 5", "HUD displays unshielded status: 'HP  5 / 5'")
+	_assert(count_active_wards.call() == 0, "HUD displays 0 active shield wards when depleted")
 	main.free()

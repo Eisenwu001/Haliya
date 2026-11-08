@@ -7,25 +7,25 @@ extends "res://ui/components/haliya_panel_dialog.gd"
 
 const PAGES := [
 	{
-		"title": "PAGE 1 / 3  •  MOVEMENT & TRAVERSAL",
+		"title": "PAGE 1 / 3  •  MOVEMENT AND TRAVERSAL",
 		"rows": [
 			{"keys": ["A", "D"], "mouse": "", "action": "MOVE LEFT / RIGHT", "desc": "Traverse the moonlit forest floor and highland ridges."},
-			{"keys": ["SPACE"], "mouse": "", "action": "JUMP & WALL JUMP", "desc": "Leap across chasms or rebound off vertical cliff faces."},
-			{"keys": ["S"], "mouse": "", "action": "CROUCH & DROP", "desc": "Duck beneath projectiles or drop through bamboo platforms."},
+			{"keys": ["SPACE"], "mouse": "", "action": "JUMP AND WALL JUMP", "desc": "Leap across chasms or rebound off vertical cliff faces."},
+			{"keys": ["S"], "mouse": "", "action": "CROUCH AND DROP", "desc": "Duck beneath projectiles or drop through bamboo platforms."},
 			{"keys": ["C"], "mouse": "", "action": "SHADOW DASH", "desc": "Evade through enemy strikes with brief invulnerability."}
 		]
 	},
 	{
-		"title": "PAGE 2 / 3  •  BLADE ARTS & PARRYING",
+		"title": "PAGE 2 / 3  •  BLADE ARTS AND PARRYING",
 		"rows": [
 			{"keys": ["J"], "mouse": "LMB", "action": "KAMPILAN STRIKE", "desc": "Chain 3-hit combos; strike downward in mid-air to pogo."},
-			{"keys": ["K"], "mouse": "RMB", "action": "DEFLECT & PARRY", "desc": "Raise ward just before impact to shatter enemy posture."},
+			{"keys": ["K"], "mouse": "RMB", "action": "DEFLECT AND PARRY", "desc": "Raise ward just before impact to shatter enemy posture."},
 			{"keys": ["E"], "mouse": "", "action": "PATAYIN EXECUTION", "desc": "Execute staggered foes when the Baybayin rune appears."},
 			{"keys": ["R"], "mouse": "", "action": "SANCTUARY RESET", "desc": "Return to the nearest moonlit altar if trapped."}
 		]
 	},
 	{
-		"title": "PAGE 3 / 3  •  STAMINA, ARMOR & SHRINES",
+		"title": "PAGE 3 / 3  •  STAMINA, ARMOR AND SHRINES",
 		"rows": [
 			{"keys": ["STA"], "mouse": "", "action": "STAMINA DISCIPLINE", "desc": "Attacks and dashes consume stamina; avoid full exhaustion."},
 			{"keys": ["ARM"], "mouse": "", "action": "ANCESTRAL WARD", "desc": "Absorbs hits before HP and regenerates out of combat."},

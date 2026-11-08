@@ -17,6 +17,7 @@ PALETTE = {
     "bone_cream": (216, 207, 168, 255),   # #d8cfa8
     "muted_teal": (63, 107, 102, 255),    # #3f6b66
     "warm_gold": (201, 162, 74, 255),     # #c9a24a (Selection & Title ONLY)
+    "danger_red": (138, 59, 50, 255),     # #8a3b32 (Damage & Low Health)
 }
 
 
@@ -1152,6 +1153,31 @@ def generate_totem_halo() -> None:
     img.save(os.path.join(OUT_DIR, "totem_halo_dithered.png"))
 
 
+# ============================================================================
+# 15. PLAYER STATUS HUD SUITE (Cluster Bayer Dithered Dark Gradient)
+# ============================================================================
+def generate_hud_cluster_bg() -> None:
+    # Cluster Bayer Dithered Dark Gradient (170x95 px) to cover HP, Shield, and Stamina
+    gw, gh = 170, 95
+    gimg = Image.new("RGBA", (gw, gh), C_TRANSPARENT)
+    for y in range(gh):
+        for x in range(gw):
+            norm_x = x / float(gw)
+            norm_y = y / float(gh)
+            fade_x = max(0.0, 1.0 - norm_x ** 1.3)
+            fade_y = max(0.0, 1.0 - norm_y ** 1.3)
+            dens = fade_x * fade_y
+            max_alpha = 180
+            target_a = dens * max_alpha
+
+            bval = (BAYER_4X4[y & 3][x & 3] + 0.5) / 16.0
+            if (target_a / 255.0) > bval * 0.40:
+                out_a = min(220, int(round(target_a * 1.3)))
+                if out_a > 12:
+                    gimg.putpixel((x, y), (16, 20, 18, out_a))
+    gimg.save(os.path.join(OUT_DIR, "hud_cluster_bg_gradient.png"))
+
+
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
     generate_title_haliya()
@@ -1168,6 +1194,8 @@ def main() -> None:
     generate_in_game_progress_bars()
     generate_ground_mist_bands()
     generate_totem_halo()
+    generate_hud_cluster_bg()
+    print(f"[generate_ui_assets] Successfully generated all pixel-art UI sprites in {OUT_DIR}")
     print(f"[generate_ui_assets] Successfully generated all pixel-art UI sprites in {OUT_DIR}")
 
 

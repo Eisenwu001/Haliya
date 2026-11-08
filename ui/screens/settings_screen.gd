@@ -70,7 +70,7 @@ func _build_settings_content() -> void:
 	content_panel.add_child(audio_tab)
 
 	var audio_hdr := Label.new()
-	audio_hdr.text = "SOUND & KULINTANG HARMONICS"
+	audio_hdr.text = "SOUND AND KULINTANG HARMONICS"
 	audio_hdr.theme_type_variation = &"SectionHeaderLabel"
 	audio_tab.add_child(audio_hdr)
 
@@ -112,7 +112,7 @@ func _build_settings_content() -> void:
 	content_panel.add_child(video_tab)
 
 	var video_hdr := Label.new()
-	video_hdr.text = "DISPLAY & VISUAL FEEDBACK"
+	video_hdr.text = "DISPLAY AND VISUAL FEEDBACK"
 	video_hdr.theme_type_variation = &"SectionHeaderLabel"
 	video_tab.add_child(video_hdr)
 
@@ -145,7 +145,7 @@ func _build_settings_content() -> void:
 	video_tab.add_child(skip_intro_check)
 
 	var reduce_motion_check := CheckBox.new()
-	reduce_motion_check.text = "  REDUCE MOTION (FREEZE SWAY & ATMOSPHERE)"
+	reduce_motion_check.text = "  REDUCE MOTION (FREEZE SWAY AND ATMOSPHERE)"
 	reduce_motion_check.button_pressed = GameSettings.reduce_motion
 	reduce_motion_check.toggled.connect(func(pressed: bool):
 		GameSettings.reduce_motion = pressed

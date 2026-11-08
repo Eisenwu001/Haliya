@@ -12,10 +12,14 @@ const COLOR_CHARCOAL: Color = Color("#1e2420")
 const COLOR_BONE_CREAM: Color = Color("#d8cfa8")
 const COLOR_MUTED_TEAL: Color = Color("#3f6b66")
 const COLOR_WARM_GOLD: Color = Color("#c9a24a") # Used ONLY for selection and title
+const COLOR_DANGER_RED: Color = Color("#8a3b32") # Muted brick red for damage & low health
 
 # Derived High-Contrast Tints & Shades (All text colors >= 5.0:1 WCAG contrast on charcoal)
 const COLOR_CHARCOAL_DEEP: Color = Color("#101412")
 const COLOR_CHARCOAL_OVERLAY: Color = Color(0.063, 0.078, 0.071, 0.88)
+const COLOR_DANGER_DARK: Color = Color("#5a221c")
+const COLOR_DANGER_BRIGHT: Color = Color("#af584e")
+const COLOR_DANGER_OVERLAY: Color = Color(0.541, 0.231, 0.196, 0.38)
 const COLOR_SLATE_DARK: Color = Color("#27323f")
 const COLOR_SLATE_LIGHT: Color = Color("#8c9695")
 const COLOR_TEAL_DARK: Color = Color("#294642")
@@ -77,6 +81,64 @@ const LOADING_MAX_HOLD_SEC: float = 4.2      # Maximum loading screen hold
 const LOADING_COMPLETE_HOLD_SEC: float = 0.50 # 0.5s pause at 100% before dissolving to Title Screen
 const PRESS_START_STEP_SEC: float = 0.28     # 4-step pulse cadence for "PRESS ANY KEY TO START"
 
+# ── HUD_SCALE (Centralized Status HUD Size, Spacing & Layout Budget) ──────────
+# Base Resolution: 640x360 viewport (proportional scale 4/3 = 1.333x relative to 480x270 budget).
+# Integer scaling rule: "If an icon cannot hit its target size with an integer factor, choose nearest factor BELOW it, never above."
+# - Target HP body height: 11 * (4/3) = 14.67px -> Factor 17 gives 14px body (nearest integer factor below target).
+# - Target Shield amulet body: 11 * (4/3) = 14.67px -> Factor 17 gives 14px body.
+# - HP Spacing: 2px (row total: 5 * 14 + 4 * 2 = 78px; 12.19% screen width <= 14% budget).
+# - Shield Spacing: 2px (3 amulets total: 3 * 14 + 2 * 2 = 46px).
+# - Shield Row Offset Y: 20px (ensures 3px gap below HP tear; tear is at y=14..16, shield at y=20, no overlap).
+# - Stamina Bar Offset Y: 41px (ensures 4px gap below shield amulet row; shield body is at y=23..36, no overlap).
+# - Stamina Bar Width: 78px (exact match to HP row, about 60px * 4/3 = 80px).
+# - Stamina Bar Height: 5px (plain procedural notched frame: 1px charcoal outline, slate track, 2px bone-cream end caps).
+# - Screen Margin: 8px from top-left (6px * 4/3 = 8px).
+# - Whole Cluster Size: 78px wide (12.19% <= 14% budget), 46px tall (12.78% <= 13% budget).
+
+# Screen Margins & Cluster Origin
+const HUD_STATUS_ROOT_POS: Vector2 = Vector2(8.0, 8.0)
+
+# HP Crescent Moon Row
+const HUD_HP_PIP_SIZE: Vector2 = Vector2(14.0, 18.0)   # Total icon size (14px body + 3px tear)
+const HUD_HP_BODY_HEIGHT: float = 14.0                 # Measured crescent body height (budget 14.67px, nearest factor below)
+const HUD_HP_SPACING: int = 2                          # Spacing between crescents
+
+# Shield Amulet Row
+const HUD_SHIELD_WARD_SIZE: Vector2 = Vector2(14.0, 18.0) # Total icon size (3px cord + 14px body)
+const HUD_SHIELD_BODY_HEIGHT: float = 14.0               # Measured amulet body height
+const HUD_SHIELD_SPACING: int = 2                        # Spacing between amulets
+const HUD_SHIELD_ROW_OFFSET_Y: float = 20.0              # Position directly under HP tear (gap: 3px, no overlap)
+
+# Stamina Bar (Plain Procedural Notched Frame: 1px charcoal outline, slate track, 2px bone-cream end caps)
+const HUD_STAMINA_OFFSET_Y: float = 41.0                 # Position under shield row (gap: 4px, no cord/tear overlap)
+const HUD_STAMINA_WIDTH: float = 78.0                    # Matches HP row total width (78px)
+const HUD_STAMINA_HEIGHT: float = 5.0                    # 5px budget height
+const HUD_STAMINA_TRACK_X: float = 3.0                   # Inset by 1px charcoal outline + 2px bone end cap
+const HUD_STAMINA_TRACK_Y: float = 1.0                   # Inset by 1px charcoal outline
+const HUD_STAMINA_TRACK_WIDTH: float = 72.0              # 78 - 6px (end caps + outline)
+const HUD_STAMINA_TRACK_HEIGHT: float = 3.0             # 5 - 2px (outline)
+const HUD_STAMINA_FULL_HOLD_SEC: float = 2.0             # Fade to 40% opacity after 2s at full
+const HUD_STAMINA_FADED_ALPHA: float = 0.40
+const HUD_DAMAGE_CRACK_DURATION_SEC: float = 0.25        # Hold hp_damaged for 0.25s
+const HUD_SHIELD_CRACK_SEC: float = 0.10                 # Hold shield_cracked for 0.10s
+const HUD_SHIELD_BROKEN_SEC: float = 0.25                # Hold shield_broken for 0.25s
+const HUD_LOW_HP_PULSE_SEC: float = 0.35                 # 2-frame stepped pulse cadence at 1 HP
+
+# Level Progress Tracker (Procedural Line & Milestone Icons)
+const HUD_PROGRESS_ROOT_POS_Y: float = 8.0              # Vertically aligned with top of HP row
+const HUD_PROGRESS_LINE_WIDTH: float = 160.0            # 160px line -> exactly 16px per 10% tick notch
+const HUD_PROGRESS_TOTAL_WIDTH: float = 172.0           # 160 + 12px (icons) = 172px (26.88% screen width <= 28% budget)
+const HUD_PROGRESS_LINE_OFFSET_Y: float = 13.0          # Y position of the 2px line relative to progress root
+const HUD_PROGRESS_LINE_HEIGHT: float = 2.0             # 2px tall line (1px slate/bone core, 1px charcoal outline)
+const HUD_PROGRESS_TICK_HEIGHT: float = 3.0             # 1px taller than line (3px tall)
+const HUD_PROGRESS_MILESTONE_TICK_HEIGHT: float = 5.0   # Longer notches at milestones (5px tall)
+const HUD_PROGRESS_ICON_SIZE: Vector2 = Vector2(12.0, 12.0) # Milestone icons 12px tall, all same size
+const HUD_PROGRESS_MARKER_SIZE: Vector2 = Vector2(5.0, 7.0) # Teal wisp marker (5x7px)
+const HUD_PROGRESS_FADED_ALPHA: float = 0.50            # 50% opacity when no milestone near
+const HUD_PROGRESS_PROXIMITY_THRESHOLD: float = 0.10    # Within 10% of milestone triggers full opacity
+const HUD_PROGRESS_HOLD_DURATION_SEC: float = 2.0       # Hold full opacity for 2s after reaching milestone
+const HUD_PROGRESS_POP_SCALE: float = 1.25              # 3-frame pop scale: 1x -> 1.25x -> 1x (12px -> 15px)
+
 # ── 5. Shared Theme & Asset Paths ────────────────────────────────────────────
 const PATH_THEME: String = "res://ui/theme/haliya_theme.tres"
 const PATH_FONT_UI: String = "res://assets/fonts/Silkscreen-Regular.ttf"
@@ -94,6 +156,35 @@ const TEX_SPIRAL_ACCENT: String = "res://assets/ui/spiral_accent.png"
 const TEX_PANEL_NOTCHED: String = "res://assets/ui/panel_notched_9slice.png"
 const TEX_PANEL_INNER: String = "res://assets/ui/panel_inner_9slice.png"
 const TEX_PANEL_INNER_HL: String = "res://assets/ui/panel_inner_hl_9slice.png"
+const TEX_PAUSE_DITHER_OVERLAY: String = "res://assets/ui/pause_dither_overlay.png"
+
+# Rebuilt Player Status HUD Assets (Incoming Imported Art: 10x integer downscale, zero blur)
+const TEX_HUD_HP_FULL: String = "res://assets/ui/hp_full.png"
+const TEX_HUD_HP_EMPTY: String = "res://assets/ui/hp_empty.png"
+const TEX_HUD_HP_DAMAGED: String = "res://assets/ui/hp_damaged.png"
+
+const TEX_HUD_SHIELD_INTACT: String = "res://assets/ui/shield_intact.png"
+const TEX_HUD_SHIELD_CRACKED: String = "res://assets/ui/shield_cracked.png"
+const TEX_HUD_SHIELD_BROKEN: String = "res://assets/ui/shield_broken.png"
+
+const TEX_HUD_STA_FRAME: String = "res://assets/ui/stamina_frame.png"
+const TEX_HUD_STA_FRAME_LEFT: String = "res://assets/ui/stamina_frame_left.png"
+const TEX_HUD_STA_FRAME_MID: String = "res://assets/ui/stamina_frame_mid.png"
+const TEX_HUD_STA_FRAME_RIGHT: String = "res://assets/ui/stamina_frame_right.png"
+
+const TEX_HUD_CLUSTER_BG: String = "res://assets/ui/hud_cluster_bg_gradient.png"
+
+# Aliases for backwards compatibility
+const TEX_HUD_PIP_FULL: String = "res://assets/ui/hp_full.png"
+const TEX_HUD_PIP_EMPTY: String = "res://assets/ui/hp_empty.png"
+const TEX_HUD_PIP_GOLD: String = "res://assets/ui/hp_full.png"
+const TEX_HUD_SHIELD_WARD: String = "res://assets/ui/shield_intact.png"
+const TEX_HUD_STA_TRACK: String = "res://assets/ui/stamina_frame.png"
+const TEX_HUD_STA_FILL: String = "res://assets/ui/stamina_frame.png"
+const TEX_HUD_PIP_DANGER: String = "res://assets/ui/hp_damaged.png"
+const TEX_HUD_STA_BG_NOTCHED: String = "res://assets/ui/stamina_frame.png"
+const TEX_HUD_STA_FILL_NOTCHED: String = "res://assets/ui/stamina_frame.png"
+const TEX_HUD_STA_GHOST_NOTCHED: String = "res://assets/ui/stamina_frame.png"
 const TEX_STAGE_LOCKED: String = "res://assets/ui/stage_node_locked.png"
 const TEX_STAGE_UNLOCKED: String = "res://assets/ui/stage_node_unlocked.png"
 const TEX_STAGE_COMPLETED: String = "res://assets/ui/stage_node_completed.png"

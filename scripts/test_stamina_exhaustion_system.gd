@@ -194,22 +194,29 @@ func test_hud_stamina_exhaustion_display() -> void:
 	var main = MainScript.new()
 	main.setup_ui()
 
-	assert_test(is_instance_valid(main.stamina_text_label), "HUD has stamina_text_label")
 	assert_test(is_instance_valid(main.stamina_bar_root), "HUD has stamina_bar_root")
+	assert_test(is_instance_valid(main.stamina_fill_clip), "HUD has stamina_fill_clip")
+	assert_test(is_instance_valid(main.stamina_track_rect), "HUD has stamina_track_rect")
 
 	var player = PlayerScript.new()
 	main.player = player
 
-	# Normal status
+	# Normal full status
 	main._on_player_stamina_changed(100.0, 100.0)
-	assert_test(main.stamina_text_label.text == "STA  100 / 100", "Normal HUD shows 'STA  100 / 100'")
+	var expected_full: float = UIThemeConstants.HUD_STAMINA_TRACK_WIDTH
+	assert_test(main.stamina_fill_clip.size.x == expected_full, "Full stamina sets fill clip width to %.1f px" % expected_full)
+
+	# Half status
+	main._on_player_stamina_changed(50.0, 100.0)
+	var expected_half: float = round(expected_full * 0.5)
+	assert_test(main.stamina_fill_clip.size.x == expected_half, "Half stamina sets fill clip width to %.1f px" % expected_half)
 
 	# Exhausted status
 	player.current_stamina = 0.0
 	player.trigger_exhaustion()
 	main._on_player_stamina_changed(0.0, 100.0)
-	assert_test(main.stamina_text_label.text == "STA  0 / 100  (EXHAUSTED)", "Exhausted HUD shows 'STA  0 / 100  (EXHAUSTED)'")
-	assert_test(main.stamina_bar_root.modulate == Color(1.6, 0.45, 0.45, 1.0), "Stamina bar modulates red warning when exhausted")
+	assert_test(main.stamina_fill_clip.size.x == 0.0, "0 stamina sets fill clip width to 0.0 px")
+	assert_test(main.stamina_track_rect.color == Color("#8a3b32"), "Track flashes danger red #8a3b32 on exhaustion")
 
 	player.free()
 	main.free()

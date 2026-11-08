@@ -474,7 +474,7 @@ func load_haliya_animations() -> void:
 						guard_crouch_paths.append(full_path)
 					elif "common_22_landing" in clean_name:
 						landing_paths.append(full_path)
-					elif "idle" in clean_name and "stand_A" in clean_name:
+					elif "idle" in clean_name and ("stand_A" in clean_name or "stand_B" in clean_name):
 						idle_paths.append(full_path)
 					elif "cobination01" in clean_name:
 						combo1_paths.append(full_path)
@@ -529,6 +529,10 @@ func load_and_sort_textures(paths: Array[String]) -> Array[Texture2D]:
 static func sort_paths_custom(a: String, b: String) -> bool:
 	if "run_kick" in a and "run_kick" in b:
 		return get_run_kick_index(a) < get_run_kick_index(b)
+	if "stand_A" in a and "stand_B" in b:
+		return true
+	if "stand_B" in a and "stand_A" in b:
+		return false
 	return extract_frame_number(a) < extract_frame_number(b)
 
 static func get_run_kick_index(path: String) -> int:

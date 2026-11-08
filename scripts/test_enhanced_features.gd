@@ -229,7 +229,7 @@ func test_item_5_combat_juice_and_vfx() -> void:
 	# Test tracking calculation at 50%
 	player.global_position.x = 2560.0
 	main_mock.update_stage_progress_tracker()
-	var expected_x = (2560.0 / 5120.0) * 220.0 # 110.0
-	assert_true(abs(main_mock.progress_bar_fill.size.x - expected_x) < 0.1, "Progress fill should be 110px at halfway point")
+	var expected_x = (2560.0 / 5120.0) * UIThemeConstants.HUD_PROGRESS_LINE_WIDTH # 80.0
+	assert_true(abs(main_mock.progress_bar_fill.size.x - expected_x) < 0.1, "Progress fill should match halfway width (80px)")
 
 	root_node.queue_free()

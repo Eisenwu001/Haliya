@@ -16,7 +16,7 @@ const STAGES_DATA := [
 		"level_idx": -1,
 		"code": "PROLOGUE",
 		"title": "SACRED HOMESTEAD",
-		"region": "Bicol Bamboo Clearing & Altar",
+		"region": "Bicol Bamboo Clearing and Altar",
 		"lore": "Hone the ancestral blade arts beneath the elder's guidance before entering the eclipsed canopy."
 	},
 	{

@@ -15,6 +15,7 @@ const CaveCrumbleLedgeScript = preload("res://scripts/cave_crumble_ledge.gd")
 const CaveSpikeHazardScript = preload("res://scripts/cave_spike_hazard.gd")
 
 const FLOOR_TILES_TEX = preload("res://assets/platform_assets/Floor Tiles1.png")
+const FOREST_DIRT_ROOTS_TEX = preload("res://assets/platform_assets/forest_dirt_roots.png")
 const OTHER_TILES_TEX = preload("res://assets/platform_assets/Other Tiles1.png")
 const FLOOR_TILES_2_TEX = preload("res://assets/platform_assets/Floor Tiles2.png")
 const OTHER_TILES_2_TEX = preload("res://assets/platform_assets/Other Tiles2.png")
@@ -673,7 +674,10 @@ static func build_ground_segments(root: Node2D, segments: Array[Dictionary], the
 							spr_sub.region_rect = Rect2(32, 32, 32, 32)
 					spr_sub.modulate = cave_tint.darkened(float(sub_y) * 0.08)
 				else:
-					spr_sub.region_rect = Rect2(0, (top_row + 1) * 32, 32, 32)
+					spr_sub.texture = FOREST_DIRT_ROOTS_TEX
+					var col_idx: int = (i + sub_y) % 4
+					var row_idx: int = 0 if sub_y == 1 else (1 if sub_y == 2 else 2)
+					spr_sub.region_rect = Rect2(col_idx * 32, row_idx * 32, 32, 32)
 				spr_sub.position = Vector2(tile_x, ground_y + 16.0 + sub_y * 32.0)
 				spr_sub.z_index = -1
 				ground_container.add_child(spr_sub)

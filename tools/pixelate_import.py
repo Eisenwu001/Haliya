@@ -23,6 +23,8 @@ import sys
 import argparse
 from collections import deque
 from PIL import Image
+import numpy as np
+from scipy import ndimage
 
 PROJECT_PALETTE = [
     # Charcoal
@@ -49,6 +51,11 @@ PROJECT_PALETTE = [
     (140, 111, 46),  # dark gold #8c6f2e
     (201, 162, 74),  # base gold #c9a24a
     (222, 197, 124), # light gold #dec57c
+
+    # Danger Red
+    (90, 34, 28),    # dark danger #5a221c
+    (138, 59, 50),   # base danger #8a3b32
+    (175, 88, 78),   # light danger #af584e
 ]
 
 DEFAULT_ASSET_SIZES = {
@@ -263,7 +270,269 @@ def lower_foliage_under_shrine(foliage_path: str, clearing_x_range: tuple[int, i
         print(f"[pixelate_import] Lowered bottom foliage under shrine clearing x={clearing_x_range} to row > {max_row}")
 
 
-def import_incoming(incoming_dir: str, art_dir: str) -> None:
+def process_hud_trio(img_path: str, factor: int = 10, is_crescent: bool = True) -> tuple[list[Image.Image], int, int]:
+    """
+    Imports a 3-icon trio image (e.g. Crescent Moon Trio or Amulet Trio).
+    1. Removes opaque edge white if present, enforces binary alpha.
+    2. Splits into 3 equal-width slots without breaking connected components.
+    3. Aligns all 3 states by the top-left edge of the main body (> 2% pixel area).
+    4. Pads all three to identical canvas dimensions.
+    5. Downscales with nearest-neighbor by integer factor (10).
+    6. Quantizes to project palette with outlines mapped to charcoal (no pure black).
+    """
+    raw = Image.open(img_path).convert("RGBA")
+    raw = remove_white_background_if_opaque(raw)
+    raw = clean_edges_and_halos(raw, alpha_threshold=128)
+
+    w, h = raw.size
+    slot_w = w / 3.0
+
+    slots_data = []
+    for s in range(3):
+        x0 = int(round(s * slot_w))
+        x1 = int(round((s + 1) * slot_w))
+        slot_img = raw.crop((x0, 0, x1, h))
+        slot_arr = np.array(slot_img)
+        alpha = slot_arr[:, :, 3] > 128
+
+        all_rows = np.where(alpha.any(axis=1))[0]
+        all_cols = np.where(alpha.any(axis=0))[0]
+
+        lbl, num = ndimage.label(alpha)
+        sizes = ndimage.sum(alpha, lbl, range(1, num + 1))
+        total_px = np.sum(alpha)
+
+        main_mask = np.zeros_like(alpha, dtype=bool)
+        for c_idx, sz in enumerate(sizes, start=1):
+            if sz >= total_px * 0.02:
+                main_mask |= (lbl == c_idx)
+
+        # In crescent slot 0, exclude tear (below y=282) from computing main body top-left anchor
+        if is_crescent and s == 0:
+            main_mask[283:, :] = False
+
+        m_rows = np.where(main_mask.any(axis=1))[0]
+        m_cols = np.where(main_mask.any(axis=0))[0]
+
+        slots_data.append({
+            "img": slot_img,
+            "m_top": m_rows.min(),
+            "m_left": m_cols.min(),
+            "m_bottom": m_rows.max(),
+            "m_right": m_cols.max(),
+            "all_top": all_rows.min(),
+            "all_left": all_cols.min(),
+            "all_bottom": all_rows.max(),
+            "all_right": all_cols.max(),
+        })
+
+    max_d_left = max(s["m_left"] - s["all_left"] for s in slots_data)
+    max_d_top = max(s["m_top"] - s["all_top"] for s in slots_data)
+    max_d_right = max(s["all_right"] - s["m_left"] for s in slots_data)
+    max_d_bottom = max(s["all_bottom"] - s["m_top"] for s in slots_data)
+
+    pad_w = max_d_left + max_d_right + 1
+    pad_h = max_d_top + max_d_bottom + 1
+
+    rem_w = pad_w % factor
+    if rem_w != 0:
+        pad_w += (factor - rem_w)
+    rem_h = pad_h % factor
+    if rem_h != 0:
+        pad_h += (factor - rem_h)
+
+    aligned_imgs = []
+    for s in slots_data:
+        canvas = Image.new("RGBA", (pad_w, pad_h), (0, 0, 0, 0))
+        paste_x = max_d_left - s["m_left"]
+        paste_y = max_d_top - s["m_top"]
+        canvas.paste(s["img"], (paste_x, paste_y))
+
+        target_size = (pad_w // factor, pad_h // factor)
+        downscaled = canvas.resize(target_size, Image.Resampling.NEAREST)
+        
+        # Quantize to project palette
+        pix = downscaled.load()
+        dw, dh = downscaled.size
+        for y in range(dh):
+            for x in range(dw):
+                r, g, b, a = pix[x, y]
+                if a < 128:
+                    pix[x, y] = (0, 0, 0, 0)
+                else:
+                    best_c = find_nearest_palette_color(r, g, b)
+                    pix[x, y] = (best_c[0], best_c[1], best_c[2], 255)
+
+        filtered = remove_isolated_pixels(downscaled)
+        aligned_imgs.append(filtered)
+
+    return aligned_imgs, pad_w // factor, pad_h // factor
+
+
+def process_stamina_bar_frame(img_path: str, factor: int = 10, repeat_count: int = 6) -> dict[str, Image.Image]:
+    """
+    Imports Ornate_Pixel_Fantasy_Status_Bars.png:
+    1. Splits top (empty) bar from bottom (filled) bar along the horizontal gap.
+    2. Cuts into left cap (spiral + ribbon), repeating bamboo section (between joints), and right cap.
+    3. Quantizes to palette and downscales with nearest neighbor by factor (10).
+    4. Assembles full frame tiled to repeat_count sections (130-131px wide).
+    5. Clears inner track channel so procedural fill and exhaustion flash render cleanly.
+    """
+    raw = Image.open(img_path).convert("RGBA")
+    raw = remove_white_background_if_opaque(raw)
+    raw = clean_edges_and_halos(raw, alpha_threshold=128)
+
+    # Empty frame occupies rows 36..174, cols 33..990
+    top_bar = raw.crop((33, 36, 991, 175))
+
+    # Joints are at x=119, 299, 479, 659, 839
+    left_cap_raw = top_bar.crop((0, 0, 119, top_bar.height))
+    mid_sec_raw = top_bar.crop((119, 0, 299, top_bar.height))
+    right_cap_raw = top_bar.crop((839, 0, top_bar.width, top_bar.height))
+
+    def _downscale_and_quantize(im: Image.Image) -> Image.Image:
+        ds = im.resize((im.width // factor, im.height // factor), Image.Resampling.NEAREST)
+        pix = ds.load()
+        dw, dh = ds.size
+        for y in range(dh):
+            for x in range(dw):
+                r, g, b, a = pix[x, y]
+                if a < 128:
+                    pix[x, y] = (0, 0, 0, 0)
+                else:
+                    best_c = find_nearest_palette_color(r, g, b)
+                    pix[x, y] = (best_c[0], best_c[1], best_c[2], 255)
+        return remove_isolated_pixels(ds)
+
+    left_ds = _downscale_and_quantize(left_cap_raw)
+    mid_ds = _downscale_and_quantize(mid_sec_raw)
+    right_ds = _downscale_and_quantize(right_cap_raw)
+
+    # Assemble tiled frame
+    total_w = left_ds.width + repeat_count * mid_ds.width + right_ds.width
+    assembled = Image.new("RGBA", (total_w, left_ds.height), (0, 0, 0, 0))
+    assembled.paste(left_ds, (0, 0))
+    cur_x = left_ds.width
+    for i in range(repeat_count):
+        assembled.paste(mid_ds, (cur_x, 0))
+        cur_x += mid_ds.width
+    assembled.paste(right_ds, (cur_x, 0))
+
+    # Clear inner dark track window (between left ribbon and right ribbon, rows y=3..7)
+    # so code-drawn stamina fill and track exhaustion flash show through
+    pix = assembled.load()
+    track_start_x = left_ds.width
+    track_end_x = total_w - right_ds.width
+    for y in range(3, 8):
+        for x in range(track_start_x, track_end_x):
+            r, g, b, a = pix[x, y]
+            if a > 0 and r <= 45 and g <= 54 and b <= 48:
+                pix[x, y] = (0, 0, 0, 0)
+
+    return {
+        "left": left_ds,
+        "mid": mid_ds,
+        "right": right_ds,
+        "assembled": assembled,
+        "track_rect": (track_start_x, 3, track_end_x - track_start_x, 5),
+    }
+
+
+def make_plain_procedural_notched_frame(w: int = 78, h: int = 5) -> Image.Image:
+    """
+    Generates plain procedural notched stamina frame per size budget:
+    1px charcoal outline (#101412) with 1px notched corners,
+    transparent inner slate track window (allowing code-drawn track & fill to show),
+    and 2px bone-cream end caps (#d8cfa8).
+    """
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    C_CHARCOAL = (16, 20, 18, 255) # 1px charcoal outline
+    C_BONE = (216, 207, 168, 255)  # 2px bone-cream end caps
+
+    # Outline with notched corners
+    for x in range(1, w - 1):
+        im.putpixel((x, 0), C_CHARCOAL)
+        im.putpixel((x, h - 1), C_CHARCOAL)
+    for y in range(1, h - 1):
+        im.putpixel((0, y), C_CHARCOAL)
+        im.putpixel((w - 1, y), C_CHARCOAL)
+
+    # 2px bone-cream end caps
+    for y in range(1, h - 1):
+        im.putpixel((1, y), C_BONE)
+        im.putpixel((2, y), C_BONE)
+        im.putpixel((w - 3, y), C_BONE)
+        im.putpixel((w - 2, y), C_BONE)
+
+    return im
+
+
+def import_hud_status_assets(incoming_dir: str, ui_dir: str, factor: int = 17) -> None:
+    print(f"=== Processing Incoming HUD Status Assets (Factor {factor}) ===")
+    os.makedirs(ui_dir, exist_ok=True)
+
+    # 1. HP Crescent Moon Trio
+    crescent_file = os.path.join(incoming_dir, "Pixel_Art_Crescent_Moon_Trio.png")
+    cw, ch = 14, 18
+    if os.path.exists(crescent_file):
+        c_imgs, cw, ch = process_hud_trio(crescent_file, factor=factor, is_crescent=True)
+        hp_names = ["hp_full.png", "hp_empty.png", "hp_damaged.png"]
+        for idx, name in enumerate(hp_names):
+            out_path = os.path.join(ui_dir, name)
+            c_imgs[idx].save(out_path, "PNG")
+            colors = len(set(c_imgs[idx].getdata()))
+            print(f"  [HP] {name}: {cw}x{ch} px, {colors} palette colors (factor={factor})")
+
+    # 2. Shield Amulet Trio
+    amulet_file = os.path.join(incoming_dir, "Pixel_Art_Amulet_Trio.png")
+    aw, ah = 14, 18
+    if os.path.exists(amulet_file):
+        a_imgs, aw, ah = process_hud_trio(amulet_file, factor=factor, is_crescent=False)
+        shield_names = ["shield_intact.png", "shield_cracked.png", "shield_broken.png"]
+        for idx, name in enumerate(shield_names):
+            out_path = os.path.join(ui_dir, name)
+            a_imgs[idx].save(out_path, "PNG")
+            colors = len(set(a_imgs[idx].getdata()))
+            print(f"  [SHIELD] {name}: {aw}x{ah} px, {colors} palette colors (factor={factor})")
+
+    # 3. Stamina Frame
+    # The ornate frame (spiral caps, ribbon tails, bamboo joints) turns to mush at 5px tall.
+    # Replace with plain procedural notched frame (1px charcoal outline, slate track window, 2px bone-cream end caps).
+    stamina_w = 5 * cw + 4 * 2 # Matches HP row width (e.g. 5*14 + 4*2 = 78px)
+    stamina_h = 5
+    notched_frame = make_plain_procedural_notched_frame(w=stamina_w, h=stamina_h)
+    notched_frame.save(os.path.join(ui_dir, "stamina_frame.png"), "PNG")
+    print(f"  [STAMINA] stamina_frame.png: {stamina_w}x{stamina_h} px plain procedural notched frame")
+
+    # 4. Cluster Bayer Dithered Dark Gradient (sized to cover new compact cluster)
+    bg_w, bg_h = stamina_w + 26, 46 + 12 # 104x58 px
+    bg_img = Image.new("RGBA", (bg_w, bg_h), (0, 0, 0, 0))
+    bayer_matrix = [
+        [0, 8, 2, 10],
+        [12, 4, 14, 6],
+        [3, 11, 1, 9],
+        [15, 7, 13, 5],
+    ]
+    for y in range(bg_h):
+        for x in range(bg_w):
+            norm_x = x / float(bg_w)
+            norm_y = y / float(bg_h)
+            fade_x = max(0.0, 1.0 - norm_x ** 1.3)
+            fade_y = max(0.0, 1.0 - norm_y ** 1.3)
+            dens = fade_x * fade_y
+            target_a = dens * 180.0
+            bval = (bayer_matrix[y & 3][x & 3] + 0.5) / 16.0
+            if (target_a / 255.0) > bval * 0.40:
+                out_a = min(220, int(round(target_a * 1.3)))
+                if out_a > 12:
+                    bg_img.putpixel((x, y), (16, 20, 18, out_a))
+    bg_img.save(os.path.join(ui_dir, "hud_cluster_bg_gradient.png"), "PNG")
+    print(f"  [BG] hud_cluster_bg_gradient.png: {bg_w}x{bg_h} px")
+
+    print("=== HUD Status Asset Import Complete ===")
+
+
+def import_incoming(incoming_dir: str, art_dir: str, ui_dir: str) -> None:
     print("=== Processing Incoming Art Assets ===")
 
     # 1. Totem Shrine (Full piece: totem, base, roots, offerings)
@@ -296,6 +565,9 @@ def import_incoming(incoming_dir: str, art_dir: str) -> None:
     if os.path.exists(hanging_path):
         process_image(hanging_path, os.path.join(art_dir, "hanging_leaves.png"), target_size=(160, 76))
 
+    # 5. Incoming HUD Status Assets (Crescents, Amulets, Stamina Plain Notched Frame)
+    import_hud_status_assets(incoming_dir, ui_dir, factor=17)
+
     print("=== Incoming Asset Import Complete ===")
 
 
@@ -305,14 +577,21 @@ def main():
     parser.add_argument("output", nargs="?", help="Output PNG file path")
     parser.add_argument("--size", nargs=2, type=int, metavar=("WIDTH", "HEIGHT"), help="Target dimensions")
     parser.add_argument("--incoming", action="store_true", help="Process all assets in res://assets/art/incoming/")
+    parser.add_argument("--hud", action="store_true", help="Process HUD status assets (HP, Shield, Stamina)")
+    parser.add_argument("--factor", type=int, default=17, help="Downscale factor for HUD status assets (default: 17)")
     args = parser.parse_args()
 
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     incoming_dir = os.path.join(project_root, "assets", "art", "incoming")
     art_dir = os.path.join(project_root, "assets", "art")
+    ui_dir = os.path.join(project_root, "assets", "ui")
+
+    if args.hud:
+        import_hud_status_assets(incoming_dir, ui_dir, factor=args.factor)
+        return
 
     if args.incoming:
-        import_incoming(incoming_dir, art_dir)
+        import_incoming(incoming_dir, art_dir, ui_dir)
         return
 
     if not args.input:

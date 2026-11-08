@@ -52,26 +52,30 @@ base_font = ExtResource("1_nm825")
 spacing_glyph = -1
 spacing_space = -1
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_u0ytm"]
+[sub_resource type="FontVariation" id="FontVariation_u0ytm"]
+base_font = ExtResource("1_nm825")
+spacing_space = 3
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_d30sy"]
 texture = ExtResource("9_rj2lf")
 texture_margin_left = 4.0
 texture_margin_top = 3.0
 texture_margin_right = 4.0
 texture_margin_bottom = 3.0
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_d30sy"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_5uwds"]
 texture = ExtResource("10_e82ba")
 texture_margin_left = 4.0
 texture_margin_top = 3.0
 texture_margin_right = 4.0
 texture_margin_bottom = 3.0
 
-[sub_resource type="FontVariation" id="FontVariation_5uwds"]
+[sub_resource type="FontVariation" id="FontVariation_3mhac"]
 base_font = ExtResource("1_nm825")
-spacing_glyph = 1
+spacing_glyph = 2
 spacing_space = 6
 
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_3mhac"]
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_vtomd"]
 content_margin_left = 14.0
 content_margin_top = 12.0
 content_margin_right = 14.0
@@ -81,10 +85,6 @@ texture_margin_left = 12.0
 texture_margin_top = 12.0
 texture_margin_right = 12.0
 texture_margin_bottom = 12.0
-
-[sub_resource type="FontVariation" id="FontVariation_vtomd"]
-base_font = ExtResource("1_nm825")
-spacing_space = 3
 
 [sub_resource type="FontVariation" id="FontVariation_rj2lf"]
 base_font = ExtResource("1_nm825")
@@ -145,7 +145,7 @@ Button/styles/hover = SubResource("StyleBoxEmpty_vo7p5")
 Button/styles/normal = SubResource("StyleBoxEmpty_vo7p5")
 Button/styles/pressed = SubResource("StyleBoxEmpty_vo7p5")
 CaptionLabel/base_type = &"Label"
-CaptionLabel/colors/font_color = Color(0.84705883, 0.8117647, 0.65882355, 1)
+CaptionLabel/colors/font_color = Color(0.72156864, 0.78431374, 0.74509805, 1)
 CaptionLabel/font_sizes/font_size = 8
 CaptionLabel/fonts/font = SubResource("FontVariation_qc62t")
 CheckBox/colors/font_color = Color(0.84705883, 0.8117647, 0.65882355, 1)
@@ -172,11 +172,19 @@ CheckButton/styles/focus = SubResource("StyleBoxEmpty_vo7p5")
 CheckButton/styles/hover = SubResource("StyleBoxEmpty_vo7p5")
 CheckButton/styles/normal = SubResource("StyleBoxEmpty_vo7p5")
 CheckButton/styles/pressed = SubResource("StyleBoxEmpty_vo7p5")
+DangerHeaderLabel/base_type = &"Label"
+DangerHeaderLabel/colors/font_color = Color(0.6862745, 0.34509805, 0.30588236, 1)
+DangerHeaderLabel/font_sizes/font_size = 12
+DangerHeaderLabel/fonts/font = SubResource("FontVariation_u0ytm")
+DangerLabel/base_type = &"Label"
+DangerLabel/colors/font_color = Color(0.5411765, 0.23137255, 0.19607843, 1)
+DangerLabel/font_sizes/font_size = 9
+DangerLabel/fonts/font = ExtResource("1_nm825")
 HSlider/icons/grabber = ExtResource("7_3mhac")
 HSlider/icons/grabber_highlight = ExtResource("8_vtomd")
-HSlider/styles/grabber_area = SubResource("StyleBoxTexture_u0ytm")
-HSlider/styles/grabber_area_highlight = SubResource("StyleBoxTexture_u0ytm")
-HSlider/styles/slider = SubResource("StyleBoxTexture_d30sy")
+HSlider/styles/grabber_area = SubResource("StyleBoxTexture_d30sy")
+HSlider/styles/grabber_area_highlight = SubResource("StyleBoxTexture_d30sy")
+HSlider/styles/slider = SubResource("StyleBoxTexture_5uwds")
 HaliyaTypography/constants/size_body = 9
 HaliyaTypography/constants/size_caption = 8
 HaliyaTypography/constants/size_header = 12
@@ -230,7 +238,7 @@ MenuButtonPrimary/colors/font_focus_color = Color(0.7882353, 0.63529414, 0.29019
 MenuButtonPrimary/colors/font_hover_color = Color(0.7882353, 0.63529414, 0.2901961, 1)
 MenuButtonPrimary/colors/font_pressed_color = Color(0.7882353, 0.63529414, 0.2901961, 1)
 MenuButtonPrimary/font_sizes/font_size = 22
-MenuButtonPrimary/fonts/font = SubResource("FontVariation_5uwds")
+MenuButtonPrimary/fonts/font = SubResource("FontVariation_3mhac")
 MenuButtonSmall/base_type = &"Button"
 MenuButtonSmall/colors/font_color = Color(0.847, 0.812, 0.659, 0.74)
 MenuButtonSmall/colors/font_focus_color = Color(0.7882353, 0.63529414, 0.2901961, 1)
@@ -242,15 +250,15 @@ MutedBodyLabel/base_type = &"Label"
 MutedBodyLabel/colors/font_color = Color(0.65882355, 0.627451, 0.50980395, 1)
 MutedBodyLabel/font_sizes/font_size = 9
 MutedBodyLabel/fonts/font = ExtResource("1_nm825")
-PanelContainer/styles/panel = SubResource("StyleBoxTexture_3mhac")
+PanelContainer/styles/panel = SubResource("StyleBoxTexture_vtomd")
 PanelHeaderLabel/base_type = &"Label"
 PanelHeaderLabel/colors/font_color = Color(0.84705883, 0.8117647, 0.65882355, 1)
 PanelHeaderLabel/font_sizes/font_size = 12
-PanelHeaderLabel/fonts/font = SubResource("FontVariation_vtomd")
+PanelHeaderLabel/fonts/font = SubResource("FontVariation_u0ytm")
 PressStartLabel/base_type = &"Label"
 PressStartLabel/colors/font_color = Color(0.84705883, 0.8117647, 0.65882355, 1)
 PressStartLabel/font_sizes/font_size = 12
-PressStartLabel/fonts/font = SubResource("FontVariation_vtomd")
+PressStartLabel/fonts/font = SubResource("FontVariation_u0ytm")
 SectionHeaderLabel/base_type = &"Label"
 SectionHeaderLabel/colors/font_color = Color(0.59607846, 0.70980394, 0.6509804, 1)
 SectionHeaderLabel/font_sizes/font_size = 10
@@ -258,7 +266,7 @@ SectionHeaderLabel/fonts/font = SubResource("FontVariation_38jal")
 SplashSubLabel/base_type = &"Label"
 SplashSubLabel/colors/font_color = Color(0.847, 0.812, 0.659, 0.88)
 SplashSubLabel/font_sizes/font_size = 12
-SplashSubLabel/fonts/font = SubResource("FontVariation_vtomd")
+SplashSubLabel/fonts/font = SubResource("FontVariation_u0ytm")
 SplashTitleLabel/base_type = &"Label"
 SplashTitleLabel/colors/font_color = Color(0.84705883, 0.8117647, 0.65882355, 1)
 SplashTitleLabel/font_sizes/font_size = 24
@@ -266,12 +274,12 @@ SplashTitleLabel/fonts/font = SubResource("FontVariation_rj2lf")
 SubtitleLabel/base_type = &"Label"
 SubtitleLabel/colors/font_color = Color(0.847, 0.812, 0.659, 0.88)
 SubtitleLabel/font_sizes/font_size = 10
-SubtitleLabel/fonts/font = SubResource("FontVariation_vtomd")
+SubtitleLabel/fonts/font = SubResource("FontVariation_u0ytm")
 VScrollBar/styles/grabber = SubResource("StyleBoxTexture_e82ba")
 VScrollBar/styles/grabber_highlight = SubResource("StyleBoxTexture_81swg")
 VScrollBar/styles/grabber_pressed = SubResource("StyleBoxTexture_81swg")
 VScrollBar/styles/scroll = SubResource("StyleBoxTexture_nfx1k")
 VersionLabel/base_type = &"Label"
-VersionLabel/colors/font_color = Color(0.847, 0.812, 0.659, 0.75)
+VersionLabel/colors/font_color = Color(0.847, 0.812, 0.659, 0.62)
 VersionLabel/font_sizes/font_size = 8
 VersionLabel/fonts/font = ExtResource("1_nm825")

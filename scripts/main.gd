@@ -21,6 +21,9 @@ const UpgradeSelectUIScript = preload("res://scripts/upgrade_select_ui.gd")
 const GameOverUIScript = preload("res://scripts/game_over_ui.gd")
 const UpgradeManager = preload("res://scripts/upgrade_manager.gd")
 const SaveManager = preload("res://scripts/save_manager.gd")
+const UIConstants = preload("res://ui/theme/ui_theme_constants.gd")
+const PauseMenuScreenScene = preload("res://ui/screens/pause_menu_screen.tscn")
+const LevelProgressBarScript = preload("res://ui/components/level_progress_bar.gd")
 var upgrade_select_ui: CanvasLayer
 var game_over_ui: CanvasLayer
 
@@ -270,20 +273,17 @@ var fade_overlay: ColorRect
 var damage_flash_overlay: ColorRect
 var low_hp_vignette: ColorRect
 
-## Health & Stamina Status Bars (Custom Fantasy Bars)
-const TEX_HUD_HP_FRAME = preload("res://assets/ui/hud_hp_bar_frame.png")
-const TEX_HUD_HP_FILL = preload("res://assets/ui/hud_hp_bar_fill.png")
-const TEX_HUD_HP_BG = preload("res://assets/ui/hud_hp_bar_bg.png")
-const TEX_HUD_STA_FRAME = preload("res://assets/ui/hud_sta_bar_frame.png")
-const TEX_HUD_STA_FILL = preload("res://assets/ui/hud_sta_bar_fill.png")
-const TEX_HUD_STA_BG = preload("res://assets/ui/hud_sta_bar_bg.png")
-
+## Health & Stamina Status Bars (Unified Theme: 2x Crescents, Shield Wards, Notched Stamina Bar)
+var hud_cluster_root: Control
+var hud_cluster_bg: TextureRect
 var hp_bar_root: Control
-var hp_fill_clip: Control
-var hp_ghost_clip: Control
-var hp_shield_clip: Control
-var hp_shield_tex: TextureRect
-var hp_frame: TextureRect
+var hp_pips_container: HBoxContainer
+var shield_wards_container: HBoxContainer
+var hp_fill_clip: Control = null
+var hp_ghost_clip: Control = null
+var hp_shield_clip: Control = null
+var hp_shield_tex: TextureRect = null
+var hp_frame: TextureRect = null
 var hp_fill_tween: Tween
 var hp_pulse_tween: Tween
 var hp_ghost_tween: Tween
@@ -294,16 +294,21 @@ var _cur_hp_cached: int = 5
 var _max_hp_cached: int = 5
 var _cur_arm_cached: int = 3
 var _max_arm_cached: int = 3
+var _prev_hp_for_crack: int = 5
+var _was_exhausted_cached: bool = false
+var stamina_full_timer: float = 0.0
+var hp_pulse_timer: float = 0.0
+var hp_pulse_frame: int = 0
+var stamina_fade_tween: Tween
+var stamina_exhaust_tween: Tween
+var stamina_fill_tween: Tween
 
 var stamina_bar_root: Control
+var stamina_track_rect: ColorRect
 var stamina_fill_clip: Control
-var stamina_ghost_clip: Control
-var stamina_fill_tween: Tween
-var stamina_ghost_tween: Tween
-var stamina_fill_tex: TextureRect
-const STA_FILL_MAX_WIDTH: float = 828.0
-var hp_text_label: Label
-var stamina_text_label: Label
+var stamina_frame_tex: TextureRect
+var hp_text_label: Label = null
+var stamina_text_label: Label = null
 
 ## Centered Atmospheric Stage Discovery (Middle of Screen, No Stars or Dashes)
 var area_discovery_container: Control
@@ -334,10 +339,13 @@ var win_label: Label
 var pause_overlay: Control
 var auto_save_indicator: Control = null
 var auto_save_tween: Tween = null
+var act1_grade_layer: CanvasLayer = null
+var act1_grade_rect: ColorRect = null
 var stage_progress_root: Control = null
 var progress_bar_fill: Control = null
 var progress_player_pin: Control = null
 var progress_shrine_pin: Control = null
+var level_progress_bar: Control = null
 # ── Audio & BGM Manager ───────────────────────────────────────────────────────
 var bgm_audio_player: AudioStreamPlayer
 var current_bgm_track: String = ""
@@ -761,6 +769,22 @@ func setup_atmosphere() -> void:
 	lens_rain_overlay.name = "LensRainOverlay"
 	storm_layer.add_child(lens_rain_overlay)
 
+	# 8. Act 1 Forest Color Grade (CanvasLayer 4: In front of world layer 0, behind UI layer 10)
+	act1_grade_layer = CanvasLayer.new()
+	act1_grade_layer.name = "Act1ColorGradeLayer"
+	act1_grade_layer.layer = 4
+	act1_grade_layer.visible = false
+	add_child(act1_grade_layer)
+
+	act1_grade_rect = ColorRect.new()
+	act1_grade_rect.name = "Act1ColorGradeRect"
+	act1_grade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	act1_grade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var act1_mat := ShaderMaterial.new()
+	act1_mat.shader = preload("res://shaders/act1_color_grade.gdshader")
+	act1_grade_rect.material = act1_mat
+	act1_grade_layer.add_child(act1_grade_rect)
+
 	puddles_container = Node2D.new()
 	puddles_container.name = "PuddlesContainer"
 	puddles_container.z_index = 1
@@ -918,6 +942,10 @@ func set_background_theme(theme_name: String) -> void:
 	var is_forest: bool = (theme_name == "Forest" or theme_name == "Rainy Forest")
 	var is_rainy: bool = (theme_name == "Rainy Forest")
 	var is_cave: bool = (theme_name == "Cave" or theme_name == "Cave Boss")
+
+	var is_act1_forest: bool = (theme_name == "Forest")
+	if is_instance_valid(act1_grade_layer):
+		act1_grade_layer.visible = is_act1_forest
 
 	for layer in forest_parallax_layers:
 		layer.visible = is_forest
@@ -1211,6 +1239,8 @@ func set_background_theme(theme_name: String) -> void:
 			"Cave Boss":
 				play_bgm(ProceduralAudio.get_cave_ambient(), "cave")
 
+	update_hud_contrast()
+
 
 # ── Level Container & Instantiation ───────────────────────────────────────────
 func setup_level_container() -> void:
@@ -1283,6 +1313,10 @@ func load_current_level() -> void:
 
 			# Auto-wire scene enemies
 			wire_scene_enemies(current_level_instance)
+
+			# Subsurface roots/dirt layer under grass for Act 1 Forest
+			if data.get("theme", "") == "Forest":
+				apply_forest_dirt_roots(current_level_instance)
 		else:
 			LevelBuilderScript.build_level(level_container, current_level_idx, data["theme"])
 	else:
@@ -1305,6 +1339,33 @@ func load_current_level() -> void:
 	setup_map_edge_boundaries()
 	trigger_area_discovery()
 	update_player_environment_lighting()
+
+
+func apply_forest_dirt_roots(level_node: Node2D) -> void:
+	if not is_instance_valid(level_node):
+		return
+	var bg = level_node.find_child("BaseGround", true, false) as TileMapLayer
+	if not is_instance_valid(bg):
+		return
+
+	var roots_tex: Texture2D = preload("res://assets/platform_assets/forest_dirt_roots.png")
+	var roots_container := Node2D.new()
+	roots_container.name = "SubsurfaceRootsDirt"
+	roots_container.z_index = -1
+	level_node.add_child(roots_container)
+
+	var used_cells = bg.get_used_cells()
+	for cell in used_cells:
+		if cell.y >= 10 and cell.y <= 13:
+			var spr := Sprite2D.new()
+			spr.texture = roots_tex
+			spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			spr.region_enabled = true
+			var col_idx: int = (abs(cell.x) + cell.y) % 4
+			var row_idx: int = 0 if cell.y == 10 else (1 if cell.y == 11 else 2)
+			spr.region_rect = Rect2(col_idx * 32, row_idx * 32, 32, 32)
+			spr.position = Vector2(cell.x * 32 + 16, cell.y * 32 + 16)
+			roots_container.add_child(spr)
 
 
 func update_player_environment_lighting() -> void:
@@ -2255,6 +2316,7 @@ func setup_camera() -> void:
 func setup_ui() -> void:
 	ui_layer = CanvasLayer.new()
 	ui_layer.name = "HUD"
+	ui_layer.layer = 10
 	add_child(ui_layer)
 
 	# Master container for all in-game HUD elements (toggled together)
@@ -2266,154 +2328,96 @@ func setup_ui() -> void:
 
 	var custom_font = load("res://alagard.ttf")
 
-	# ── 1. Custom Health Bar (Top-Left: 10, 10 | Frame 946x84 scaled 0.20 to ~189px) ────
+	# ── Master Status HUD Cluster (Top-Left: Vector2(14, 12)) ───────────────────
+	hud_cluster_root = Control.new()
+	hud_cluster_root.name = "HUDStatusCluster"
+	hud_cluster_root.position = UIConstants.HUD_STATUS_ROOT_POS
+	hud_container.add_child(hud_cluster_root)
+
+	# Dithered background gradient (behind cluster, activated when contrast < 3:1)
+	hud_cluster_bg = TextureRect.new()
+	hud_cluster_bg.name = "HUDClusterBG"
+	hud_cluster_bg.texture = load(UIConstants.TEX_HUD_CLUSTER_BG)
+	hud_cluster_bg.position = Vector2(-4, -4)
+	hud_cluster_bg.modulate.a = 0.0 # Initialized hidden; updated via update_hud_contrast()
+	hud_cluster_root.add_child(hud_cluster_bg)
+
+	# ── 1. Custom Health Bar (HP: row of crescent icons per HUD_SCALE) ──
 	hp_bar_root = Control.new()
 	hp_bar_root.name = "HealthBarRoot"
-	hp_bar_root.position = Vector2(10, 10)
-	hp_bar_root.scale = Vector2(0.20, 0.20)
-	hud_container.add_child(hp_bar_root)
+	hp_bar_root.position = Vector2(0, 0)
+	hud_cluster_root.add_child(hp_bar_root)
 
-	var hp_bg = TextureRect.new()
-	hp_bg.name = "HPBackground"
-	hp_bg.texture = TEX_HUD_HP_BG
-	hp_bg.position = Vector2(58, 12)
-	hp_bar_root.add_child(hp_bg)
+	hp_pips_container = HBoxContainer.new()
+	hp_pips_container.name = "HPPipsContainer"
+	hp_pips_container.add_theme_constant_override("separation", UIConstants.HUD_HP_SPACING)
+	hp_bar_root.add_child(hp_pips_container)
 
-	# Ghost damage bar (amber/yellow trailing bar)
-	hp_ghost_clip = Control.new()
-	hp_ghost_clip.name = "HPGhostClip"
-	hp_ghost_clip.position = Vector2(58, 12)
-	hp_ghost_clip.size = Vector2(HP_FILL_MAX_WIDTH, 60)
-	hp_ghost_clip.clip_contents = true
-	hp_bar_root.add_child(hp_ghost_clip)
+	# ── 2. Shield Ward Row (directly under HP, no empty slots, per HUD_SCALE) ──
+	shield_wards_container = HBoxContainer.new()
+	shield_wards_container.name = "ShieldWardsContainer"
+	shield_wards_container.position = Vector2(0, UIConstants.HUD_SHIELD_ROW_OFFSET_Y)
+	shield_wards_container.add_theme_constant_override("separation", UIConstants.HUD_SHIELD_SPACING)
+	hud_cluster_root.add_child(shield_wards_container)
 
-	var hp_ghost_tex = TextureRect.new()
-	hp_ghost_tex.texture = TEX_HUD_HP_FILL
-	hp_ghost_tex.modulate = Color(1.8, 1.4, 0.4, 0.85)
-	hp_ghost_clip.add_child(hp_ghost_tex)
-
-	# Primary Health bar (vibrant red patterned weave)
-	hp_fill_clip = Control.new()
-	hp_fill_clip.name = "HPFillClip"
-	hp_fill_clip.position = Vector2(58, 12)
-	hp_fill_clip.size = Vector2(HP_FILL_MAX_WIDTH, 60)
-	hp_fill_clip.clip_contents = true
-	hp_bar_root.add_child(hp_fill_clip)
-
-	var hp_fill_tex = TextureRect.new()
-	hp_fill_tex.texture = TEX_HUD_HP_FILL
-	hp_fill_clip.add_child(hp_fill_tex)
-
-	# Luminous Crystal Shield Coating (Cyan/silver overlay over health weave)
-	hp_shield_clip = Control.new()
-	hp_shield_clip.name = "HPShieldClip"
-	hp_shield_clip.position = Vector2(58, 12)
-	hp_shield_clip.size = Vector2(HP_FILL_MAX_WIDTH, 60)
-	hp_shield_clip.clip_contents = true
-	hp_bar_root.add_child(hp_shield_clip)
-
-	hp_shield_tex = TextureRect.new()
-	hp_shield_tex.name = "HPShieldTex"
-	hp_shield_tex.texture = TEX_HUD_HP_FILL
-	hp_shield_tex.modulate = Color(0.40, 1.25, 2.0, 0.95)
-	hp_shield_clip.add_child(hp_shield_tex)
-
-	# Ornate bronze frame with diamond end-caps
-	hp_frame = TextureRect.new()
-	hp_frame.name = "HPFrame"
-	hp_frame.texture = TEX_HUD_HP_FRAME
-	hp_frame.position = Vector2(0, 0)
-	hp_bar_root.add_child(hp_frame)
-
-	# ── 2. Custom Stamina Bar (Top-Left: 10, 31 | Frame 946x87 scaled 0.20 to ~189px) ───
+	# ── 3. Custom Stamina Bar (Plain procedural notched frame per HUD_SCALE) ──
 	stamina_bar_root = Control.new()
 	stamina_bar_root.name = "StaminaBarRoot"
-	stamina_bar_root.position = Vector2(10, 31)
-	stamina_bar_root.scale = Vector2(0.20, 0.20)
-	hud_container.add_child(stamina_bar_root)
+	stamina_bar_root.position = Vector2(0, UIConstants.HUD_STAMINA_OFFSET_Y)
+	stamina_bar_root.custom_minimum_size = Vector2(UIConstants.HUD_STAMINA_WIDTH, UIConstants.HUD_STAMINA_HEIGHT)
+	hud_cluster_root.add_child(stamina_bar_root)
 
-	var sta_bg = TextureRect.new()
-	sta_bg.name = "StaminaBackground"
-	sta_bg.texture = TEX_HUD_STA_BG
-	sta_bg.position = Vector2(59, 13)
-	stamina_bar_root.add_child(sta_bg)
-
-	# Stamina ghost bar (trailing gold-green highlight)
-	stamina_ghost_clip = Control.new()
-	stamina_ghost_clip.name = "StaminaGhostClip"
-	stamina_ghost_clip.position = Vector2(59, 13)
-	stamina_ghost_clip.size = Vector2(STA_FILL_MAX_WIDTH, 61)
-	stamina_ghost_clip.clip_contents = true
-	stamina_bar_root.add_child(stamina_ghost_clip)
-
-	var sta_ghost_tex = TextureRect.new()
-	sta_ghost_tex.texture = TEX_HUD_STA_FILL
-	sta_ghost_tex.modulate = Color(1.8, 1.9, 0.5, 0.85)
-	stamina_ghost_clip.add_child(sta_ghost_tex)
+	stamina_track_rect = ColorRect.new()
+	stamina_track_rect.name = "StaminaTrackRect"
+	stamina_track_rect.position = Vector2(UIConstants.HUD_STAMINA_TRACK_X, UIConstants.HUD_STAMINA_TRACK_Y)
+	stamina_track_rect.size = Vector2(UIConstants.HUD_STAMINA_TRACK_WIDTH, UIConstants.HUD_STAMINA_TRACK_HEIGHT)
+	stamina_track_rect.color = UIConstants.COLOR_SLATE_DARK
+	stamina_bar_root.add_child(stamina_track_rect)
 
 	stamina_fill_clip = Control.new()
 	stamina_fill_clip.name = "StaminaFillClip"
-	stamina_fill_clip.position = Vector2(59, 13)
-	stamina_fill_clip.size = Vector2(STA_FILL_MAX_WIDTH, 61)
+	stamina_fill_clip.position = Vector2(UIConstants.HUD_STAMINA_TRACK_X, UIConstants.HUD_STAMINA_TRACK_Y)
+	stamina_fill_clip.size = Vector2(UIConstants.HUD_STAMINA_TRACK_WIDTH, UIConstants.HUD_STAMINA_TRACK_HEIGHT)
 	stamina_fill_clip.clip_contents = true
 	stamina_bar_root.add_child(stamina_fill_clip)
 
-	stamina_fill_tex = TextureRect.new()
-	stamina_fill_tex.name = "StaminaFillTex"
-	stamina_fill_tex.texture = TEX_HUD_STA_FILL
-	stamina_fill_clip.add_child(stamina_fill_tex)
+	var sta_highlight := ColorRect.new()
+	sta_highlight.name = "StaminaHighlight"
+	sta_highlight.position = Vector2(0, 0)
+	sta_highlight.size = Vector2(UIConstants.HUD_STAMINA_TRACK_WIDTH, 1.0)
+	sta_highlight.color = UIConstants.COLOR_TEAL_LIGHT
+	stamina_fill_clip.add_child(sta_highlight)
 
-	var sta_frame = TextureRect.new()
-	sta_frame.name = "StaminaFrame"
-	sta_frame.texture = TEX_HUD_STA_FRAME
-	sta_frame.position = Vector2(0, 0)
-	stamina_bar_root.add_child(sta_frame)
+	var sta_body := ColorRect.new()
+	sta_body.name = "StaminaBody"
+	sta_body.position = Vector2(0, 1.0)
+	sta_body.size = Vector2(UIConstants.HUD_STAMINA_TRACK_WIDTH, maxf(1.0, UIConstants.HUD_STAMINA_TRACK_HEIGHT - 1.0))
+	sta_body.color = UIConstants.COLOR_MUTED_TEAL
+	stamina_fill_clip.add_child(sta_body)
 
-	# ── HP & Stamina Text Labels (Centered Directly Over Inner Bars at 1.0 scale) ───
-	hp_text_label = Label.new()
-	hp_text_label.name = "HPTextLabel"
-	hp_text_label.position = Vector2(22, 8)
-	hp_text_label.size = Vector2(166, 17)
-	hp_text_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hp_text_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hp_text_label.text = "HP  5 / 5  (+3)"
-	hp_text_label.add_theme_font_override("font", custom_font)
-	hp_text_label.add_theme_font_size_override("font_size", 11)
-	hp_text_label.add_theme_color_override("font_color", Color(0.85, 0.98, 1.2, 0.95))
-	hp_text_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
-	hp_text_label.add_theme_constant_override("shadow_offset_x", 1)
-	hp_text_label.add_theme_constant_override("shadow_offset_y", 1)
-	hud_container.add_child(hp_text_label)
+	stamina_frame_tex = TextureRect.new()
+	stamina_frame_tex.name = "StaminaFrameTex"
+	stamina_frame_tex.position = Vector2(0, 0)
+	stamina_frame_tex.texture = load(UIConstants.TEX_HUD_STA_FRAME)
+	stamina_frame_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stamina_bar_root.add_child(stamina_frame_tex)
 
-	stamina_text_label = Label.new()
-	stamina_text_label.name = "StaminaTextLabel"
-	stamina_text_label.position = Vector2(22, 30)
-	stamina_text_label.size = Vector2(166, 17)
-	stamina_text_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stamina_text_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stamina_text_label.text = "STA  100 / 100"
-	stamina_text_label.add_theme_font_override("font", custom_font)
-	stamina_text_label.add_theme_font_size_override("font_size", 11)
-	stamina_text_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.90, 0.95))
-	stamina_text_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
-	stamina_text_label.add_theme_constant_override("shadow_offset_x", 1)
-	stamina_text_label.add_theme_constant_override("shadow_offset_y", 1)
-	hud_container.add_child(stamina_text_label)
+	update_hud_contrast()
 
-	# ── 3. Top-Right Minimalist Kill Counter (Sleek, Unobtrusive) ─────────────
+	# ── 3. Top-Right Minimalist Kill Counter (Small, Bone Cream, Menu Font, 1px Charcoal Outline) ───
 	score_label = Label.new()
 	score_label.name = "ScoreLabel"
-	score_label.position = Vector2(480, 12)
-	score_label.size = Vector2(148, 22)
+	score_label.position = Vector2(490, 12)
+	score_label.size = Vector2(136, 18)
 	score_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	score_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	score_label.text = "KILLS: 0"
-	score_label.add_theme_font_override("font", custom_font)
-	score_label.add_theme_font_size_override("font_size", 15)
-	score_label.add_theme_color_override("font_color", Color(0.92, 0.88, 0.80, 0.95))
-	score_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
-	score_label.add_theme_constant_override("shadow_offset_x", 1)
-	score_label.add_theme_constant_override("shadow_offset_y", 1)
+	var menu_font = load(UIConstants.PATH_FONT_UI)
+	score_label.add_theme_font_override("font", menu_font)
+	score_label.add_theme_font_size_override("font_size", 9)
+	score_label.add_theme_color_override("font_color", UIConstants.COLOR_BONE_CREAM)
+	score_label.add_theme_color_override("font_outline_color", UIConstants.COLOR_CHARCOAL_DEEP)
+	score_label.add_theme_constant_override("outline_size", 2)
 	hud_container.add_child(score_label)
 
 	# ── 4. Centered Stage Discovery (Middle of Screen, No Stars or Dashes) ────
@@ -2433,40 +2437,52 @@ func setup_ui() -> void:
 
 	area_discovery_container = Control.new()
 	area_discovery_container.name = "AreaDiscoveryContainer"
-	area_discovery_container.position = Vector2(0, 125)
-	area_discovery_container.size = Vector2(640, 80)
+	area_discovery_container.position = Vector2(18, 286)
+	area_discovery_container.size = Vector2(300, 56)
 	area_discovery_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_container.add_child(area_discovery_container)
 
-	stage_name_label = Label.new()
-	stage_name_label.name = "StageNameLabel"
-	stage_name_label.position = Vector2(0, 0)
-	stage_name_label.size = Vector2(640, 36)
-	stage_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stage_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	stage_name_label.text = cur_data.get("scene_title", "")
-	stage_name_label.add_theme_font_override("font", custom_font)
-	stage_name_label.add_theme_font_size_override("font_size", 24)
-	stage_name_label.add_theme_color_override("font_color", Color(0.96, 0.92, 0.82, 1.0))
-	stage_name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
-	stage_name_label.add_theme_constant_override("shadow_offset_x", 2)
-	stage_name_label.add_theme_constant_override("shadow_offset_y", 2)
-	area_discovery_container.add_child(stage_name_label)
+	var title_card_bg := TextureRect.new()
+	title_card_bg.name = "TitleCardBG"
+	title_card_bg.texture = preload("res://assets/ui/title_card_gradient.png")
+	title_card_bg.position = Vector2(-12, -8)
+	title_card_bg.size = Vector2(300, 64)
+	title_card_bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	title_card_bg.stretch_mode = TextureRect.STRETCH_SCALE
+	title_card_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	area_discovery_container.add_child(title_card_bg)
 
 	stage_level_label = Label.new()
 	stage_level_label.name = "StageLevelLabel"
-	stage_level_label.position = Vector2(0, 52)
-	stage_level_label.size = Vector2(640, 22)
-	stage_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stage_level_label.position = Vector2(0, 2)
+	stage_level_label.size = Vector2(280, 14)
+	stage_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	stage_level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	stage_level_label.text = cur_data.get("level_title", "")
-	stage_level_label.add_theme_font_override("font", custom_font)
-	stage_level_label.add_theme_font_size_override("font_size", 13)
-	stage_level_label.add_theme_color_override("font_color", Color(0.82, 0.76, 0.65, 0.90))
+	stage_level_label.add_theme_font_override("font", preload("res://assets/fonts/Silkscreen-Regular.ttf"))
+	stage_level_label.add_theme_font_size_override("font_size", 9)
+	stage_level_label.add_theme_color_override("font_color", UIThemeConstants.COLOR_MUTED_TEAL)
 	stage_level_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
 	stage_level_label.add_theme_constant_override("shadow_offset_x", 1)
 	stage_level_label.add_theme_constant_override("shadow_offset_y", 1)
 	area_discovery_container.add_child(stage_level_label)
+
+	stage_name_label = Label.new()
+	stage_name_label.name = "StageNameLabel"
+	stage_name_label.position = Vector2(0, 18)
+	stage_name_label.size = Vector2(280, 24)
+	stage_name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	stage_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stage_name_label.text = cur_data.get("scene_title", "")
+	stage_name_label.add_theme_font_override("font", preload("res://assets/fonts/Silkscreen-Bold.ttf"))
+	stage_name_label.add_theme_font_size_override("font_size", 14)
+	stage_name_label.add_theme_color_override("font_color", UIThemeConstants.COLOR_BONE_CREAM)
+	stage_name_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
+	stage_name_label.add_theme_constant_override("shadow_offset_x", 1)
+	stage_name_label.add_theme_constant_override("shadow_offset_y", 1)
+	stage_name_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.90))
+	stage_name_label.add_theme_constant_override("outline_size", 2)
+	area_discovery_container.add_child(stage_name_label)
 
 	trigger_area_discovery()
 
@@ -2503,18 +2519,18 @@ func setup_ui() -> void:
 	exit_prompt_label.add_theme_constant_override("shadow_offset_y", 2)
 	hud_container.add_child(exit_prompt_label)
 
-	# ── 6. Full-Screen Damage Flash Overlay ──────────────────────────────────
+	# ── 6. Full-Screen Damage Flash Overlay (#8a3b32 Muted Brick Red) ────────
 	damage_flash_overlay = ColorRect.new()
 	damage_flash_overlay.name = "DamageFlashOverlay"
-	damage_flash_overlay.color = Color(0.85, 0.05, 0.10, 0.0)
+	damage_flash_overlay.color = Color(0.541, 0.231, 0.196, 0.0)
 	damage_flash_overlay.size = Vector2(640, 360)
 	damage_flash_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_layer.add_child(damage_flash_overlay)
 
-	# ── 6b. Pulsating Low-HP Attrition Vignette ──────────────────────────────
+	# ── 6b. Pulsating Low-HP Attrition Vignette (#8a3b32 Muted Brick Red) ────
 	low_hp_vignette = ColorRect.new()
 	low_hp_vignette.name = "LowHpVignette"
-	low_hp_vignette.color = Color(0.65, 0.02, 0.05, 0.0)
+	low_hp_vignette.color = Color(0.541, 0.231, 0.196, 0.0)
 	low_hp_vignette.size = Vector2(640, 360)
 	low_hp_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_layer.add_child(low_hp_vignette)
@@ -2631,6 +2647,7 @@ func setup_ui() -> void:
 	setup_boss_hud()
 	setup_auto_save_indicator()
 	setup_stage_progress_tracker()
+	_update_hp_bar_display(false)
 
 	upgrade_select_ui = UpgradeSelectUIScript.new()
 	upgrade_select_ui.name = "UpgradeSelectUI"
@@ -2720,82 +2737,29 @@ func setup_stage_progress_tracker() -> void:
 		return
 	if is_instance_valid(stage_progress_root):
 		return
-	stage_progress_root = Control.new()
-	stage_progress_root.name = "StageProgressTracker"
-	stage_progress_root.anchor_left = 0.5
-	stage_progress_root.anchor_right = 0.5
-	stage_progress_root.anchor_top = 0.0
-	stage_progress_root.anchor_bottom = 0.0
-	stage_progress_root.offset_left = -108.0
-	stage_progress_root.offset_right = 132.0
-	stage_progress_root.offset_top = 15.0
-	stage_progress_root.offset_bottom = 35.0
-	stage_progress_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	level_progress_bar = LevelProgressBarScript.new()
+	level_progress_bar.name = "LevelProgressBar"
+	stage_progress_root = level_progress_bar
 	hud_container.add_child(stage_progress_root)
 
-	# Sleek Engraved Kamagong Hardwood Bar Frame (240 x 20, inner channel = 220 x 10 at x=10, y=5)
-	var track_frame := TextureRect.new()
-	track_frame.name = "TrackFrame"
-	track_frame.texture = load("res://assets/ui/progress_track_frame.png")
-	track_frame.position = Vector2(0, 0)
-	track_frame.size = Vector2(240, 20)
-	stage_progress_root.add_child(track_frame)
-
-	# Woven Banig & Carved Timber Fill Bar (220 x 10 inside recessed wooden channel)
-	var fill_tex := TextureRect.new()
-	fill_tex.name = "TrackFill"
-	fill_tex.texture = load("res://assets/ui/progress_track_fill.png")
-	fill_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	fill_tex.stretch_mode = TextureRect.STRETCH_TILE
-	fill_tex.position = Vector2(10, 5)
-	fill_tex.size = Vector2(0, 10)
-	progress_bar_fill = fill_tex
-	stage_progress_root.add_child(progress_bar_fill)
-
-	# Ancestral Wooden Spirit Shrine marker at checkpoint location
-	var shrine_tex := TextureRect.new()
-	shrine_tex.name = "ShrinePin"
-	shrine_tex.texture = load("res://assets/ui/progress_pin_shrine.png")
-	shrine_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	shrine_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	shrine_tex.position = Vector2(10.0 + (BOSS_CHECKPOINT_X / 5120.0) * 220.0 - 9.0, -10.0)
-	shrine_tex.size = Vector2(18, 22)
-	progress_shrine_pin = shrine_tex
-	stage_progress_root.add_child(progress_shrine_pin)
-
-	# Goal / Boss marker at far right (Crossed Kris Daggers)
-	var goal_pin := TextureRect.new()
-	goal_pin.name = "GoalPin"
-	goal_pin.texture = load("res://assets/ui/progress_pin_boss.png")
-	goal_pin.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	goal_pin.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	goal_pin.position = Vector2(10.0 + 220.0 - 10.0, -9.0)
-	goal_pin.size = Vector2(20, 20)
-	stage_progress_root.add_child(goal_pin)
-
-	# Player Pin (Haliya's Carved Kamagong Wood & Weathered Bone Mask)
-	var player_tex := TextureRect.new()
-	player_tex.name = "PlayerPin"
-	player_tex.texture = load("res://assets/ui/progress_pin_haliya.png")
-	player_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	player_tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	player_tex.position = Vector2(10.0 - 9.0, -10.0)
-	player_tex.size = Vector2(18, 22)
-	progress_player_pin = player_tex
-	stage_progress_root.add_child(progress_player_pin)
+	# Expose references for tests and compatibility
+	progress_bar_fill = level_progress_bar.progress_bar_fill_rect
+	progress_player_pin = level_progress_bar.marker_rect
+	progress_shrine_pin = level_progress_bar.icon_shrine
 
 
 func update_stage_progress_tracker() -> void:
 	if not is_instance_valid(stage_progress_root) or not is_instance_valid(player):
 		return
-	var total_w = 220.0
 	var terrain_w = maxf(1000.0, current_level_width)
 	var ratio = clampf(player.global_position.x / terrain_w, 0.0, 1.0)
-	var current_x = ratio * total_w
-	if is_instance_valid(progress_bar_fill):
-		progress_bar_fill.size.x = current_x
-	if is_instance_valid(progress_player_pin):
-		progress_player_pin.position.x = 10.0 + clampf(current_x - 9.0, -9.0, total_w - 9.0)
+	var checkpoint_r = clampf(BOSS_CHECKPOINT_X / terrain_w, 0.0, 1.0)
+
+	if is_instance_valid(level_progress_bar):
+		level_progress_bar.update_progress(ratio, checkpoint_r)
+	elif is_instance_valid(progress_bar_fill):
+		progress_bar_fill.size.x = ratio * UIConstants.HUD_PROGRESS_LINE_WIDTH
 
 
 func setup_boss_hud() -> void:
@@ -2949,184 +2913,24 @@ func setup_boss_hud() -> void:
 
 
 func setup_pause_menu() -> void:
-	pause_overlay = Control.new()
+	pause_overlay = PauseMenuScreenScene.instantiate()
 	pause_overlay.name = "PauseOverlay"
-	pause_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
 	pause_overlay.visible = false
-	pause_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	ui_layer.add_child(pause_overlay)
 
-	var bg_dim = ColorRect.new()
-	bg_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg_dim.color = Color(0, 0, 0, 0.76)
-	pause_overlay.add_child(bg_dim)
-
-	var custom_font = load("res://alagard.ttf")
-
-	var panel = PanelContainer.new()
-	panel.anchor_left = 0.5
-	panel.anchor_right = 0.5
-	panel.anchor_top = 0.5
-	panel.anchor_bottom = 0.5
-	panel.offset_left = -225.0
-	panel.offset_right = 225.0
-	panel.offset_top = -138.0
-	panel.offset_bottom = 138.0
-	panel.size = Vector2(450, 275)
-	var panel_sb = StyleBoxFlat.new()
-	panel_sb.bg_color = Color(0.07, 0.09, 0.13, 0.96)
-	panel_sb.border_color = Color(0.72, 0.62, 0.40, 1.0)
-	panel_sb.border_width_left = 2
-	panel_sb.border_width_right = 2
-	panel_sb.border_width_top = 2
-	panel_sb.border_width_bottom = 2
-	panel_sb.content_margin_left = 18
-	panel_sb.content_margin_right = 18
-	panel_sb.content_margin_top = 16
-	panel_sb.content_margin_bottom = 16
-	panel.add_theme_stylebox_override("panel", panel_sb)
-	pause_overlay.add_child(panel)
-
-	var hbox = HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 20)
-	panel.add_child(hbox)
-
-	# ── Left Column: Menu Buttons ─────────────────────────────────────────────
-	var vbox_left = VBoxContainer.new()
-	vbox_left.custom_minimum_size = Vector2(170, 0)
-	vbox_left.add_theme_constant_override("separation", 6)
-	hbox.add_child(vbox_left)
-
-	var header = Label.new()
-	header.text = "PAUSED"
-	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	header.add_theme_font_override("font", custom_font)
-	header.add_theme_font_size_override("font_size", 22)
-	header.add_theme_color_override("font_color", Color(0.96, 0.90, 0.75, 1.0))
-	header.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.95))
-	header.add_theme_constant_override("shadow_offset_x", 1)
-	header.add_theme_constant_override("shadow_offset_y", 1)
-	vbox_left.add_child(header)
-
-	var sep = Control.new()
-	sep.custom_minimum_size = Vector2(0, 4)
-	vbox_left.add_child(sep)
-
-	var btn_resume = Button.new()
-	btn_resume.text = "RESUME"
-	btn_resume.custom_minimum_size = Vector2(160, 26)
-	btn_resume.add_theme_font_override("font", custom_font)
-	btn_resume.add_theme_font_size_override("font_size", 13)
-	btn_resume.pressed.connect(toggle_pause)
-	vbox_left.add_child(btn_resume)
-
-	var btn_settings = Button.new()
-	btn_settings.text = "SETTINGS"
-	btn_settings.custom_minimum_size = Vector2(160, 26)
-	btn_settings.add_theme_font_override("font", custom_font)
-	btn_settings.add_theme_font_size_override("font_size", 13)
-	btn_settings.pressed.connect(func():
-		if is_instance_valid(settings_menu):
-			settings_menu.open_menu()
-	)
-	vbox_left.add_child(btn_settings)
-
-	var btn_codex = Button.new()
-	btn_codex.text = "LORE CODEX"
-	btn_codex.custom_minimum_size = Vector2(160, 26)
-	btn_codex.add_theme_font_override("font", custom_font)
-	btn_codex.add_theme_font_size_override("font_size", 13)
-	btn_codex.pressed.connect(func():
-		if is_instance_valid(bestiary_codex_ui):
-			bestiary_codex_ui.open_menu()
-	)
-	vbox_left.add_child(btn_codex)
-
-	var btn_restart = Button.new()
-	btn_restart.text = "RESTART LEVEL"
-	btn_restart.custom_minimum_size = Vector2(160, 30)
-	btn_restart.add_theme_font_override("font", custom_font)
-	btn_restart.add_theme_font_size_override("font_size", 14)
-	btn_restart.pressed.connect(func():
+	pause_overlay.resume_requested.connect(toggle_pause)
+	pause_overlay.restart_requested.connect(func():
 		toggle_pause()
 		load_current_level()
 		spawn_level_enemies()
 		respawn_player_at_checkpoint()
 	)
-	vbox_left.add_child(btn_restart)
-
-	var btn_menu = Button.new()
-	btn_menu.text = "SAVE & QUIT"
-	btn_menu.custom_minimum_size = Vector2(160, 30)
-	btn_menu.add_theme_font_override("font", custom_font)
-	btn_menu.add_theme_font_size_override("font_size", 14)
-	btn_menu.pressed.connect(func():
+	pause_overlay.save_and_quit_requested.connect(func():
 		SaveManager.save_game(SaveManager.active_slot, self)
 		Engine.time_scale = 1.0
 		get_tree().paused = false
 		get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 	)
-	vbox_left.add_child(btn_menu)
-
-	# ── Right Column: Controls Guide ──────────────────────────────────────────
-	var controls_panel = PanelContainer.new()
-	controls_panel.custom_minimum_size = Vector2(215, 0)
-	var ctrl_sb = StyleBoxFlat.new()
-	ctrl_sb.bg_color = Color(0.04, 0.05, 0.08, 0.90)
-	ctrl_sb.border_color = Color(0.48, 0.40, 0.26, 0.85)
-	ctrl_sb.border_width_left = 1
-	ctrl_sb.border_width_right = 1
-	ctrl_sb.border_width_top = 1
-	ctrl_sb.border_width_bottom = 1
-	ctrl_sb.content_margin_left = 12
-	ctrl_sb.content_margin_right = 12
-	ctrl_sb.content_margin_top = 8
-	ctrl_sb.content_margin_bottom = 8
-	controls_panel.add_theme_stylebox_override("panel", ctrl_sb)
-	hbox.add_child(controls_panel)
-
-	var vbox_right = VBoxContainer.new()
-	vbox_right.add_theme_constant_override("separation", 4)
-	controls_panel.add_child(vbox_right)
-
-	var ctrl_title = Label.new()
-	ctrl_title.text = "CONTROLS"
-	ctrl_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	ctrl_title.add_theme_font_override("font", custom_font)
-	ctrl_title.add_theme_font_size_override("font_size", 14)
-	ctrl_title.add_theme_color_override("font_color", Color(0.88, 0.76, 0.50, 1.0))
-	vbox_right.add_child(ctrl_title)
-
-	var ctrl_list = [
-		["Move", "A / D  or  Arrows"],
-		["Jump", "Space  or  W"],
-		["Sprint", "Shift (Uses Stamina)"],
-		["Attack", "J  or  Left Click"],
-		["Guard", "K  or  Right Click"],
-		["Dodge", "Alt  or  S + Space"],
-		["Crouch", "S  or  Down"],
-		["Pause", "ESC"]
-	]
-
-	for entry in ctrl_list:
-		var row = HBoxContainer.new()
-		var action_lbl = Label.new()
-		action_lbl.text = entry[0]
-		action_lbl.add_theme_font_override("font", custom_font)
-		action_lbl.add_theme_font_size_override("font_size", 11)
-		action_lbl.add_theme_color_override("font_color", Color(0.72, 0.70, 0.65, 0.90))
-		action_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		row.add_child(action_lbl)
-
-		var key_lbl = Label.new()
-		key_lbl.text = entry[1]
-		key_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		key_lbl.add_theme_font_override("font", custom_font)
-		key_lbl.add_theme_font_size_override("font_size", 11)
-		key_lbl.add_theme_color_override("font_color", Color(0.96, 0.92, 0.82, 1.0))
-		row.add_child(key_lbl)
-
-		vbox_right.add_child(row)
 
 
 func toggle_pause() -> void:
@@ -3134,8 +2938,19 @@ func toggle_pause() -> void:
 		return
 	var is_paused = !get_tree().paused
 	get_tree().paused = is_paused
-	if pause_overlay:
-		pause_overlay.visible = is_paused
+	if is_instance_valid(hud_container):
+		hud_container.visible = !is_paused and is_ui_visible
+	if is_instance_valid(pause_overlay):
+		if is_paused:
+			if pause_overlay.has_method("open_menu"):
+				pause_overlay.open_menu()
+			else:
+				pause_overlay.visible = true
+		else:
+			if pause_overlay.has_method("close_menu"):
+				pause_overlay.close_menu()
+			else:
+				pause_overlay.visible = false
 
 
 func toggle_ui() -> void:
@@ -3299,6 +3114,7 @@ func _process(delta: float) -> void:
 		update_score_hud()
 		SaveManager.active_run_play_time += delta
 		update_stage_progress_tracker()
+		_update_hud_status_process(delta)
 
 		# Map Edge Level Transition & Pre-Boss Checkpoint Trigger
 		if not is_transitioning:
@@ -3947,79 +3763,197 @@ func restart_game() -> void:
 
 
 # ── Combat Event Signal Handlers & Juice ──────────────────────────────────────
-func _update_hp_bar_display(was_damage: bool = false) -> void:
-	if not is_instance_valid(hp_fill_clip) or not is_instance_valid(hp_ghost_clip):
+func _update_hud_status_process(delta: float) -> void:
+	# 1. Stamina 2.0s full hold -> 40% opacity fade
+	if is_instance_valid(stamina_bar_root) and is_instance_valid(player):
+		var p_sta = player.get("current_stamina")
+		var p_max_sta = player.get("max_stamina")
+		if p_sta != null and p_max_sta != null and p_sta >= p_max_sta - 0.05:
+			if not GameSettings.reduce_motion:
+				stamina_full_timer += delta
+				if stamina_full_timer >= UIConstants.HUD_STAMINA_FULL_HOLD_SEC:
+					if stamina_bar_root.modulate.a > UIConstants.HUD_STAMINA_FADED_ALPHA + 0.01:
+						if stamina_fade_tween == null or not stamina_fade_tween.is_valid():
+							stamina_fade_tween = create_tween()
+							stamina_fade_tween.tween_property(stamina_bar_root, "modulate:a", UIConstants.HUD_STAMINA_FADED_ALPHA, 0.40)
+			else:
+				stamina_bar_root.modulate.a = 1.0
+		else:
+			stamina_full_timer = 0.0
+			if is_instance_valid(stamina_fade_tween) and stamina_fade_tween.is_valid():
+				stamina_fade_tween.kill()
+			if stamina_bar_root.modulate.a < 1.0:
+				stamina_bar_root.modulate.a = 1.0
+
+	# 2. Critical 1 HP stepped pulse: "At 1 HP the last full crescent pulses between hp_full and a 70%-opacity copy (2-frame, stepped, slow)."
+	if _cur_hp_cached == 1 and _cur_arm_cached <= 0 and is_instance_valid(hp_pips_container) and hp_pips_container.get_child_count() > 0:
+		var p0 = hp_pips_container.get_child(0) as TextureRect
+		if is_instance_valid(p0) and not p0.has_meta("is_holding_damaged"):
+			if GameSettings.reduce_motion:
+				p0.modulate = Color(1, 1, 1, 1)
+			else:
+				hp_pulse_timer += delta
+				if hp_pulse_timer >= UIConstants.HUD_LOW_HP_PULSE_SEC:
+					hp_pulse_timer = 0.0
+					hp_pulse_frame = 1 - hp_pulse_frame
+					p0.modulate = Color(1, 1, 1, 0.70 if hp_pulse_frame == 1 else 1.0)
+
+
+func update_hud_contrast(force_bright: Variant = null) -> void:
+	if not is_instance_valid(hud_cluster_bg):
+		return
+	var is_bright: bool
+	if force_bright != null:
+		is_bright = bool(force_bright)
+	else:
+		var cur_theme: String = LEVELS_DATA[current_level_idx].get("theme", "") if current_level_idx < LEVELS_DATA.size() else ""
+		# Bright scenes: Rice Field daytime (sky background luminance ~0.65 vs bone cream L ~0.77 yields contrast 1.17:1 < 3:1)
+		# Dark scenes: Forest, Cave, Abyss (background luminance <= 0.15 vs bone cream yields contrast > 4.5:1)
+		is_bright = (cur_theme == "Rice Field")
+
+	# Enable subtle dark dithered gradient ONLY when contrast drops below 3:1
+	hud_cluster_bg.modulate.a = 1.0 if is_bright else 0.0
+
+
+func _update_hp_bar_display(was_damage: bool = false, prev_hp: int = -1) -> void:
+	if not is_instance_valid(hp_pips_container):
 		return
 
-	var hp_ratio: float = clamp(float(_cur_hp_cached) / float(_max_hp_cached), 0.0, 1.0) if _max_hp_cached > 0 else 0.0
-	var hp_target_width: float = HP_FILL_MAX_WIDTH * hp_ratio
+	var total_base: int = _max_hp_cached
+	var cur_hp: int = clampi(_cur_hp_cached, 0, total_base)
+	var cur_arm: int = maxi(0, _cur_arm_cached)
+	var is_critical: bool = (cur_hp <= 1 and cur_arm <= 0)
 
-	# 1. Main red weave fill smoothly tweens down on damage over 0.25s (or snaps/grows on heal)
-	if is_instance_valid(hp_fill_tween) and hp_fill_tween.is_valid():
-		hp_fill_tween.kill()
+	# Ensure container has exactly total_base (5) TextureRect nodes for base HP
+	while hp_pips_container.get_child_count() > total_base:
+		var c = hp_pips_container.get_child(hp_pips_container.get_child_count() - 1)
+		hp_pips_container.remove_child(c)
+		c.queue_free()
 
-	if was_damage:
-		hp_fill_tween = create_tween()
-		hp_fill_tween.tween_property(hp_fill_clip, "size:x", hp_target_width, 0.25).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	else:
-		hp_fill_clip.size.x = hp_target_width
+	while hp_pips_container.get_child_count() < total_base:
+		var pip := TextureRect.new()
+		pip.custom_minimum_size = UIConstants.HUD_HP_PIP_SIZE
+		pip.stretch_mode = TextureRect.STRETCH_KEEP
+		hp_pips_container.add_child(pip)
 
-	# 2. Ghost damage bar: delays 0.30s, then smoothly catches up over 0.40s
-	if is_instance_valid(hp_ghost_tween) and hp_ghost_tween.is_valid():
-		hp_ghost_tween.kill()
+	var tex_full = load(UIConstants.TEX_HUD_HP_FULL)
+	var tex_empty = load(UIConstants.TEX_HUD_HP_EMPTY)
 
-	if was_damage:
-		hp_ghost_tween = create_tween()
-		hp_ghost_tween.tween_interval(0.30)
-		hp_ghost_tween.tween_property(hp_ghost_clip, "size:x", hp_target_width, 0.40).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	else:
-		hp_ghost_clip.size.x = hp_target_width
-
-	# 3. Luminous Crystal Shield Coating overlay (Cyan/silver layer coating the HP bar)
-	if is_instance_valid(hp_shield_clip):
-		var arm_ratio: float = clamp(float(_cur_arm_cached) / float(_max_arm_cached), 0.0, 1.0) if _max_arm_cached > 0 else 0.0
-		var shield_target_width: float = HP_FILL_MAX_WIDTH * arm_ratio
-
-		if is_instance_valid(hp_shield_tween) and hp_shield_tween.is_valid():
-			hp_shield_tween.kill()
-
-		hp_shield_tween = create_tween()
-		hp_shield_tween.tween_property(hp_shield_clip, "size:x", shield_target_width, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-
-	# 4. Integrated Text Label: displays (+N) shield buffer when shielded
-	if is_instance_valid(hp_text_label):
-		if _cur_arm_cached > 0:
-			hp_text_label.text = "HP  %d / %d  (+%d)" % [_cur_hp_cached, _max_hp_cached, _cur_arm_cached]
-			hp_text_label.add_theme_color_override("font_color", Color(0.85, 0.98, 1.2, 0.95))
+	for i in range(total_base):
+		var pip: TextureRect = hp_pips_container.get_child(i) as TextureRect
+		if i < cur_hp:
+			pip.texture = tex_full
+			if is_critical and i == 0 and not GameSettings.reduce_motion:
+				pip.modulate = Color(1, 1, 1, 0.70 if hp_pulse_frame == 1 else 1.0)
+			else:
+				pip.modulate = Color(1, 1, 1, 1)
 		else:
-			hp_text_label.text = "HP  %d / %d" % [_cur_hp_cached, _max_hp_cached]
-			hp_text_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.90, 0.95))
+			# Lost HP slot: check if this was damage and pip was just lost
+			if was_damage and prev_hp > 0 and i >= cur_hp and i < prev_hp:
+				_play_crescent_crack_anim(pip)
+			elif not pip.has_meta("is_holding_damaged"):
+				pip.texture = tex_empty
+				pip.modulate = Color(1, 1, 1, 1)
 
-	# 5. Frame Sheen: subtle celestial platinum-blue tint when protected by shield
-	if is_instance_valid(hp_frame):
-		if _cur_arm_cached > 0:
-			hp_frame.modulate = Color(0.85, 1.05, 1.25, 1.0)
-		else:
-			hp_frame.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	# Update distinct shield wards in shield_wards_container directly under HP
+	_update_shield_wards_display(cur_arm, was_damage)
 
-	# 6. Critical low health heartbeat pulse (at 1 HP and no shield left)
-	if is_instance_valid(hp_pulse_tween) and hp_pulse_tween.is_valid():
-		hp_pulse_tween.kill()
+	# Damage punch on health bar root (respect Reduce Motion)
+	if was_damage and is_instance_valid(hp_bar_root) and not GameSettings.reduce_motion:
+		var punch := create_tween()
+		punch.tween_property(hp_bar_root, "position:x", -3.0, 0.04).set_trans(Tween.TRANS_QUAD)
+		punch.tween_property(hp_bar_root, "position:x", 0.0, 0.08).set_trans(Tween.TRANS_BOUNCE)
 
-	if _cur_hp_cached == 1 and _cur_arm_cached <= 0:
-		hp_pulse_tween = create_tween().set_loops()
-		hp_pulse_tween.tween_property(hp_bar_root, "modulate", Color(1.6, 0.4, 0.4, 1.0), 0.35).set_trans(Tween.TRANS_SINE)
-		hp_pulse_tween.tween_property(hp_bar_root, "modulate", Color(1.0, 1.0, 1.0, 1.0), 0.35).set_trans(Tween.TRANS_SINE)
+	# Critical low health vignette (#8a3b32)
+	if is_critical:
+		if is_instance_valid(low_hp_vignette):
+			low_hp_vignette.color = Color(0.541, 0.231, 0.196, 0.16)
+			if not is_instance_valid(hp_pulse_tween) or not hp_pulse_tween.is_valid():
+				hp_pulse_tween = create_tween().set_loops()
+				hp_pulse_tween.tween_property(low_hp_vignette, "color:a", 0.32, 0.45).set_trans(Tween.TRANS_SINE)
+				hp_pulse_tween.tween_property(low_hp_vignette, "color:a", 0.12, 0.45).set_trans(Tween.TRANS_SINE)
 	else:
-		if is_instance_valid(hp_bar_root):
-			hp_bar_root.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		if is_instance_valid(hp_pulse_tween) and hp_pulse_tween.is_valid():
+			hp_pulse_tween.kill()
+		if is_instance_valid(low_hp_vignette):
+			var fade_vig = create_tween()
+			fade_vig.tween_property(low_hp_vignette, "color:a", 0.0, 0.20)
+
+
+func _play_crescent_crack_anim(pip: TextureRect) -> void:
+	if not is_instance_valid(pip):
+		return
+	pip.set_meta("is_holding_damaged", true)
+	pip.texture = load(UIConstants.TEX_HUD_HP_DAMAGED)
+	pip.modulate = Color(1, 1, 1, 1)
+
+	if not is_inside_tree() or get_tree() == null:
+		pip.texture = load(UIConstants.TEX_HUD_HP_EMPTY)
+		pip.remove_meta("is_holding_damaged")
+		return
+
+	get_tree().create_timer(UIConstants.HUD_DAMAGE_CRACK_DURATION_SEC).timeout.connect(func():
+		if is_instance_valid(pip):
+			pip.texture = load(UIConstants.TEX_HUD_HP_EMPTY)
+			pip.modulate = Color(1, 1, 1, 1)
+			pip.remove_meta("is_holding_damaged")
+	)
+
+
+func _update_shield_wards_display(cur_arm: int, was_damage: bool) -> void:
+	if not is_instance_valid(shield_wards_container):
+		return
+
+	var active_wards: Array[TextureRect] = []
+	for child in shield_wards_container.get_children():
+		var tr = child as TextureRect
+		if is_instance_valid(tr) and not tr.has_meta("is_shattering"):
+			active_wards.append(tr)
+
+	# If shield decreased, shatter the absorbed ward(s)
+	if active_wards.size() > cur_arm:
+		var wards_to_remove: int = active_wards.size() - cur_arm
+		for k in range(wards_to_remove):
+			var idx_to_pop = active_wards.size() - 1 - k
+			if idx_to_pop >= 0:
+				_play_shield_shatter_anim(active_wards[idx_to_pop])
+
+	# If shield increased (e.g. meditating at shrine), add new wards
+	while active_wards.size() < cur_arm:
+		var ward := TextureRect.new()
+		ward.custom_minimum_size = UIConstants.HUD_SHIELD_WARD_SIZE
+		ward.stretch_mode = TextureRect.STRETCH_KEEP
+		ward.texture = load(UIConstants.TEX_HUD_SHIELD_INTACT)
+		shield_wards_container.add_child(ward)
+		active_wards.append(ward)
+
+
+func _play_shield_shatter_anim(ward: TextureRect) -> void:
+	if not is_instance_valid(ward):
+		return
+	ward.set_meta("is_shattering", true)
+	ward.texture = load(UIConstants.TEX_HUD_SHIELD_CRACKED)
+
+	if not is_inside_tree() or get_tree() == null:
+		ward.queue_free()
+		return
+
+	get_tree().create_timer(UIConstants.HUD_SHIELD_CRACK_SEC).timeout.connect(func():
+		if is_instance_valid(ward):
+			ward.texture = load(UIConstants.TEX_HUD_SHIELD_BROKEN)
+			get_tree().create_timer(UIConstants.HUD_SHIELD_BROKEN_SEC).timeout.connect(func():
+				if is_instance_valid(ward):
+					ward.queue_free()
+			)
+	)
 
 
 func _on_player_hp_changed(current: int, max_hp: int) -> void:
 	var was_damage = current < _cur_hp_cached
+	var prev_hp = _cur_hp_cached
 	_cur_hp_cached = current
 	_max_hp_cached = max_hp
-	_update_hp_bar_display(was_damage)
+	_update_hp_bar_display(was_damage, prev_hp)
 
 
 func _on_player_armor_changed(current: int, max_armor: int) -> void:
@@ -4028,65 +3962,52 @@ func _on_player_armor_changed(current: int, max_armor: int) -> void:
 	_max_arm_cached = max_armor
 	_update_hp_bar_display(was_damage)
 
-	if was_damage and is_instance_valid(hp_bar_root):
-		hp_bar_root.modulate = Color(0.6, 1.4, 2.2, 1.0)
-		if is_inside_tree():
-			get_tree().create_timer(0.18).timeout.connect(func():
-				if is_instance_valid(hp_bar_root) and (_cur_hp_cached != 1 or _cur_arm_cached > 0):
-					hp_bar_root.modulate = Color(1, 1, 1, 1)
-			)
-
 
 func _on_player_stamina_changed(current: float, max_stamina: float) -> void:
-	if not is_instance_valid(stamina_fill_clip) or not is_instance_valid(stamina_ghost_clip):
+	if not is_instance_valid(stamina_fill_clip):
 		return
-	
-	if is_instance_valid(stamina_text_label):
-		if is_instance_valid(player) and player.get("is_exhausted") == true:
-			stamina_text_label.text = "STA  0 / %d  (EXHAUSTED)" % int(max_stamina)
-			stamina_text_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.35, 1.0))
-		else:
-			stamina_text_label.text = "STA  %d / %d" % [int(ceil(current)), int(max_stamina)]
-			stamina_text_label.add_theme_color_override("font_color", Color(1.0, 0.95, 0.90, 0.95))
 
-	var ratio: float = clamp(current / max_stamina, 0.0, 1.0)
-	var target_width: float = STA_FILL_MAX_WIDTH * ratio
-	var was_drain: bool = target_width < stamina_fill_clip.size.x
-	
-	# 1. Main stamina fill smoothly tweens down on drain over 0.18s
-	if is_instance_valid(stamina_fill_tween) and stamina_fill_tween.is_valid():
-		stamina_fill_tween.kill()
-	
-	if was_drain:
-		stamina_fill_tween = create_tween()
-		stamina_fill_tween.tween_property(stamina_fill_clip, "size:x", target_width, 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	else:
-		stamina_fill_clip.size.x = target_width
-	
-	# 2. Trailing ghost bar animation
-	if is_instance_valid(stamina_ghost_tween) and stamina_ghost_tween.is_valid():
-		stamina_ghost_tween.kill()
-	
-	if was_drain:
-		stamina_ghost_tween = create_tween()
-		stamina_ghost_tween.tween_interval(0.20)
-		stamina_ghost_tween.tween_property(stamina_ghost_clip, "size:x", target_width, 0.30).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	else:
-		stamina_ghost_clip.size.x = target_width
-	
-	if is_instance_valid(stamina_fill_tex):
-		if current <= 25.0:
-			stamina_fill_tex.modulate = Color(1.5, 0.8, 0.4, 1.0) # Low stamina amber warning
-		else:
-			stamina_fill_tex.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	var max_fill: float = UIConstants.HUD_STAMINA_TRACK_WIDTH
+	var ratio: float = clamp(current / max(1.0, max_stamina), 0.0, 1.0)
+	var target_width: float = float(int(round(ratio * max_fill)))
+	stamina_fill_clip.size.x = target_width
 
-	if is_instance_valid(stamina_bar_root):
-		if is_instance_valid(player) and player.get("is_exhausted") == true:
-			stamina_bar_root.modulate = Color(1.6, 0.45, 0.45, 1.0)
-		elif current <= 25.0:
-			stamina_bar_root.modulate = Color(1.25, 0.9, 0.6, 1.0)
-		else:
-			stamina_bar_root.modulate = Color(1.0, 1.0, 1.0, 1.0)
+	# 3. Fade to 40% opacity after 2s at full, back to 100% as soon as stamina is used
+	if current < max_stamina:
+		stamina_full_timer = 0.0
+		if is_instance_valid(stamina_fade_tween) and stamina_fade_tween.is_valid():
+			stamina_fade_tween.kill()
+		if is_instance_valid(stamina_bar_root) and stamina_bar_root.modulate.a < 1.0:
+			stamina_bar_root.modulate.a = 1.0
+
+	# 4. Exhaustion: "When exhausted, flash the track #8a3b32 for 3 frames."
+	var is_exhausted: bool = (is_instance_valid(player) and player.get("is_exhausted") == true)
+	if is_exhausted and not _was_exhausted_cached:
+		_was_exhausted_cached = true
+		_play_stamina_exhaust_flash()
+	elif not is_exhausted and _was_exhausted_cached:
+		_was_exhausted_cached = false
+		if is_instance_valid(stamina_track_rect):
+			stamina_track_rect.color = UIConstants.COLOR_SLATE_DARK
+
+
+func _play_stamina_exhaust_flash() -> void:
+	if not is_instance_valid(stamina_track_rect):
+		return
+	if is_instance_valid(stamina_exhaust_tween) and stamina_exhaust_tween.is_valid():
+		stamina_exhaust_tween.kill()
+
+	stamina_track_rect.color = UIConstants.COLOR_DANGER_RED
+
+	if GameSettings.reduce_motion:
+		return
+
+	stamina_exhaust_tween = create_tween()
+	stamina_exhaust_tween.tween_interval(0.05)
+	stamina_exhaust_tween.tween_callback(func():
+		if is_instance_valid(stamina_track_rect):
+			stamina_track_rect.color = UIConstants.COLOR_SLATE_DARK
+	)
 
 
 func _on_player_hit_landed(is_heavy: bool, _hit_pos: Vector2) -> void:
@@ -4136,14 +4057,14 @@ func _on_player_damage_taken(amount: int, is_blocked: bool) -> void:
 		if is_instance_valid(player):
 			VFX.spawn_floating_text(self, player.global_position + Vector2(0, -45.0), "-%d" % amount, Color(1.0, 0.2, 0.2), 14, false)
 		if is_instance_valid(hp_bar_root):
-			hp_bar_root.modulate = Color(1.8, 0.4, 0.4, 1.0)
+			hp_bar_root.modulate = Color(1.35, 0.60, 0.55, 1.0)
 			get_tree().create_timer(0.20).timeout.connect(func():
-				if is_instance_valid(hp_bar_root):
+				if is_instance_valid(hp_bar_root) and (_cur_hp_cached > 1 or _cur_arm_cached > 0):
 					hp_bar_root.modulate = Color(1, 1, 1, 1)
 			)
-		# Red visceral damage screen pulse
+		# Red visceral damage screen pulse using #8a3b32 (danger red)
 		if is_instance_valid(damage_flash_overlay):
-			damage_flash_overlay.color = Color(0.85, 0.05, 0.10, 0.28)
+			damage_flash_overlay.color = Color(0.541, 0.231, 0.196, 0.36)
 			var tween = create_tween()
 			tween.tween_property(damage_flash_overlay, "color:a", 0.0, 0.25)
 

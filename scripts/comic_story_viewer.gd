@@ -2,8 +2,12 @@ class_name ComicStoryViewer
 extends CanvasLayer
 
 signal story_completed
+signal typewriter_tick(character: String)
 
-const FONT_RES = preload("res://alagard.ttf")
+const UIConstants = preload("res://ui/theme/ui_theme_constants.gd")
+const FONT_REGULAR = preload("res://assets/fonts/Silkscreen-Regular.ttf")
+const FONT_BOLD = preload("res://assets/fonts/Silkscreen-Bold.ttf")
+
 const DEFAULT_BGM_PATH: String = "res://assets/audio/ambient/eerie_cutscene_dark_ambience.wav"
 
 const PROLOGUE_PANEL_FILES: Array[String] = [
@@ -18,8 +22,41 @@ const PROLOGUE_PANEL_FILES: Array[String] = [
 	"res://Haliya Story/Haliya comic scene(8).png"
 ]
 
+const PROLOGUE_CAPTIONS: Array[String] = [
+	"A kind of safe that feels borrowed.",
+	"Six lights going out. A shape standing over my sisters.",
+	"She doesn't remember walking here.",
+	"Kapre finds her.",
+	"\"You're the seventh. The last light.\nI watched this land before it went quiet like this. I watched what took it from us.\"",
+	"\"You don't remember all of it. Maybe that's kindness. What's left is this: he took them from you. One by one.\"",
+	"\"If you're going after him, you won't be the same when you come back.\"",
+	"\"Your family carried grief the way other people carry water, in a vessel, not in their bare hands.\"\nThere's one left.",
+	"She follows. She doesn't look back."
+]
+
+# Drift direction offsets per slide for stepped pan/zoom
+const DRIFT_VECTORS: Array[Vector2] = [
+	Vector2(8.0, -6.0),
+	Vector2(-10.0, 4.0),
+	Vector2(6.0, 8.0),
+	Vector2(-8.0, -6.0),
+	Vector2(10.0, 6.0),
+	Vector2(-6.0, -8.0),
+	Vector2(8.0, 4.0),
+	Vector2(-10.0, 8.0),
+	Vector2(6.0, -6.0)
+]
+
+const PIP_FULL = preload("res://assets/ui/hud_pip_crescent_full.png")
+const PIP_GOLD = preload("res://assets/ui/hud_pip_crescent_gold.png")
+const PIP_EMPTY = preload("res://assets/ui/hud_pip_crescent_empty.png")
+const CRESCENT_MARKER = preload("res://assets/ui/crescent_sel_0.png")
+const LOWER_GRADIENT_TEX = preload("res://assets/ui/cutscene_lower_gradient.png")
+const CUTSCENE_SHADER = preload("res://shaders/cutscene_grade.gdshader")
+
 var current_panel_paths: Array[String] = []
 var active_textures: Array[Texture2D] = []
+var current_captions: Array[String] = []
 var current_panel_idx: int = 0
 var is_active: bool = false
 var is_prologue_mode: bool = false
@@ -27,10 +64,12 @@ var is_transitioning: bool = false
 var is_in_title_card: bool = false
 var is_pausing_tree: bool = false
 
-# UI Components (Full-screen native display, zero shrinking, zero shaking)
+# UI Components
 var bg_rect: ColorRect
 var display_back: TextureRect
 var display_front: TextureRect
+var material_front: ShaderMaterial
+var material_back: ShaderMaterial
 
 # Cinematic Title Card
 var title_card_box: VBoxContainer
@@ -39,15 +78,36 @@ var lore_label: Label
 var subtitle_label: Label
 var title_tween: Tween
 
-# Minimalist Movie Subtitle Prompts
-var hud_root: Control
-var page_label: Label
+# Lower third container & text
+var lower_third_root: Control
+var lower_gradient: TextureRect
+var caption_label: Label
+var pips_container: HBoxContainer
+var pips_list: Array[TextureRect] = []
+
+# Continue prompt
+var prompt_container: HBoxContainer
+var prompt_marker: TextureRect
 var prompt_label: Label
 var prompt_tween: Tween
 
 # Audio
 var bgm_player: AudioStreamPlayer
 var sfx_player: AudioStreamPlayer
+var typewriter_sfx_player: AudioStreamPlayer
+
+# Stepped pan/zoom state
+var pan_zoom_timer: float = 0.0
+var pan_zoom_step: int = 0
+const STEP_INTERVAL: float = 0.08
+const MAX_PAN_STEPS: int = 60
+
+# Typewriter state
+var is_typewriting: bool = false
+var typewriter_char_index: int = 0
+var typewriter_timer: float = 0.0
+const TYPEWRITER_SPEED: float = 0.035 # seconds per character
+var current_slide_caption: String = ""
 
 
 func _init() -> void:
@@ -56,6 +116,35 @@ func _init() -> void:
 	setup_audio()
 	setup_ui()
 	visible = false
+
+
+func _process(delta: float) -> void:
+	if not is_active or is_in_title_card:
+		return
+
+	# 1. Stepped pan/zoom
+	if not is_transitioning and is_instance_valid(display_front) and display_front.texture != null:
+		pan_zoom_timer += delta
+		if pan_zoom_timer >= STEP_INTERVAL:
+			pan_zoom_timer = 0.0
+			pan_zoom_step = mini(pan_zoom_step + 1, MAX_PAN_STEPS)
+			var t: float = float(pan_zoom_step) / float(MAX_PAN_STEPS)
+			var cur_scale: float = 1.0 + t * 0.05
+			var drift_dir: Vector2 = DRIFT_VECTORS[current_panel_idx % DRIFTVECTORS_COUNT()]
+			var offset: Vector2 = (drift_dir * t).round()
+			display_front.scale = Vector2(cur_scale, cur_scale)
+			display_front.position = offset
+
+	# 2. Stepped typewriter reveal
+	if is_typewriting:
+		typewriter_timer += delta
+		if typewriter_timer >= TYPEWRITER_SPEED:
+			typewriter_timer = 0.0
+			_typewriter_step()
+
+
+func DRIFTVECTORS_COUNT() -> int:
+	return DRIFT_VECTORS.size()
 
 
 func setup_audio() -> void:
@@ -69,46 +158,58 @@ func setup_audio() -> void:
 	sfx_player.bus = "Master"
 	add_child(sfx_player)
 
+	typewriter_sfx_player = AudioStreamPlayer.new()
+	typewriter_sfx_player.name = "TypewriterSFX"
+	typewriter_sfx_player.bus = "Master"
+	typewriter_sfx_player.volume_db = -18.0
+	add_child(typewriter_sfx_player)
+
+	typewriter_tick.connect(_on_typewriter_tick)
+
 
 func setup_ui() -> void:
 	# 1. Fullscreen pure black canvas
 	bg_rect = ColorRect.new()
 	bg_rect.name = "CinematicBackdrop"
-	bg_rect.color = Color(0.0, 0.0, 0.0, 1.0)
+	bg_rect.color = Color(0.04, 0.05, 0.06, 1.0)
 	bg_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg_rect.mouse_filter = Control.MOUSE_FILTER_STOP
 	add_child(bg_rect)
 
-	# 2. Dual TextureRects mounted directly on fullscreen canvas with Linear Mipmaps
-	# Expands to the screen's full dimensions preserving native aspect ratio
-	# without any shrinking or artificial letterbox container crushing.
+	# 2. Dual TextureRects with cutscene grade shader
+	material_back = ShaderMaterial.new()
+	material_back.shader = CUTSCENE_SHADER
+	material_back.set_shader_parameter("dissolve_progress", 1.0)
+
+	material_front = ShaderMaterial.new()
+	material_front.shader = CUTSCENE_SHADER
+	material_front.set_shader_parameter("dissolve_progress", 1.0)
+
 	display_back = TextureRect.new()
 	display_back.name = "DisplayBack"
 	display_back.set_anchors_preset(Control.PRESET_FULL_RECT)
-	display_back.offset_left = 0
-	display_back.offset_top = 0
-	display_back.offset_right = 0
-	display_back.offset_bottom = 0
 	display_back.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	display_back.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	display_back.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	display_back.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	display_back.material = material_back
 	bg_rect.add_child(display_back)
 
 	display_front = TextureRect.new()
 	display_front.name = "DisplayFront"
 	display_front.set_anchors_preset(Control.PRESET_FULL_RECT)
-	display_front.offset_left = 0
-	display_front.offset_top = 0
-	display_front.offset_right = 0
-	display_front.offset_bottom = 0
 	display_front.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	display_front.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	display_front.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	display_front.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	display_front.material = material_front
 	bg_rect.add_child(display_front)
 
-	# 3. Cinematic Title Card (Clean typography, no diamond lines or fireflies, slow elegant text fade)
+	# Center pivots for clean stepped zoom
+	display_back.pivot_offset = Vector2(320.0, 180.0)
+	display_front.pivot_offset = Vector2(320.0, 180.0)
+
+	# 3. Cinematic Title Card (Theme font Silkscreen, warm gold & bone cream)
 	title_card_box = VBoxContainer.new()
 	title_card_box.name = "TitleCardBox"
 	title_card_box.anchor_left = 0.0
@@ -126,13 +227,13 @@ func setup_ui() -> void:
 	title_label.name = "TitleLabel"
 	title_label.text = "THE LAST LIGHT"
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_label.add_theme_font_override("font", FONT_RES)
-	title_label.add_theme_font_size_override("font_size", 28)
-	title_label.add_theme_color_override("font_color", Color(0.96, 0.90, 0.72, 1.0))
-	title_label.add_theme_color_override("font_shadow_color", Color(0.12, 0.06, 0.02, 1.0))
+	title_label.add_theme_font_override("font", FONT_BOLD)
+	title_label.add_theme_font_size_override("font_size", 22)
+	title_label.add_theme_color_override("font_color", UIConstants.COLOR_WARM_GOLD)
+	title_label.add_theme_color_override("font_shadow_color", Color(0.06, 0.08, 0.07, 1.0))
 	title_label.add_theme_constant_override("shadow_offset_x", 2)
 	title_label.add_theme_constant_override("shadow_offset_y", 2)
-	title_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.8))
+	title_label.add_theme_color_override("font_outline_color", Color(0.0, 0.0, 0.0, 0.95))
 	title_label.add_theme_constant_override("outline_size", 2)
 	title_card_box.add_child(title_label)
 
@@ -140,9 +241,9 @@ func setup_ui() -> void:
 	lore_label.name = "LoreLabel"
 	lore_label.text = "\"When the sacred moons are swallowed by the void, one masked guardian carries the dawn.\""
 	lore_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lore_label.add_theme_font_override("font", FONT_RES)
-	lore_label.add_theme_font_size_override("font_size", 11)
-	lore_label.add_theme_color_override("font_color", Color(0.85, 0.82, 0.74, 0.90))
+	lore_label.add_theme_font_override("font", FONT_REGULAR)
+	lore_label.add_theme_font_size_override("font_size", 10)
+	lore_label.add_theme_color_override("font_color", UIConstants.COLOR_BONE_CREAM)
 	lore_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 1.0))
 	lore_label.add_theme_constant_override("shadow_offset_x", 1)
 	lore_label.add_theme_constant_override("shadow_offset_y", 1)
@@ -151,68 +252,128 @@ func setup_ui() -> void:
 	subtitle_label = Label.new()
 	subtitle_label.name = "SubtitleLabel"
 	subtitle_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle_label.add_theme_font_override("font", FONT_RES)
-	subtitle_label.add_theme_font_size_override("font_size", 11)
-	subtitle_label.add_theme_color_override("font_color", Color(0.85, 0.82, 0.74, 0.90))
+	subtitle_label.add_theme_font_override("font", FONT_REGULAR)
+	subtitle_label.add_theme_font_size_override("font_size", 10)
+	subtitle_label.add_theme_color_override("font_color", UIConstants.COLOR_BONE_CREAM)
 	subtitle_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 1.0))
 	subtitle_label.add_theme_constant_override("shadow_offset_x", 1)
 	subtitle_label.add_theme_constant_override("shadow_offset_y", 1)
 	title_card_box.add_child(subtitle_label)
 
-	# 4. Minimalist HUD Overlay (Subtle text floating over bottom, crisp outline, never blocking the scene)
-	hud_root = Control.new()
-	hud_root.name = "HUDOverlay"
-	hud_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg_rect.add_child(hud_root)
+	# 4. Lower Third Dithered Gradient & Text Overlay
+	lower_third_root = Control.new()
+	lower_third_root.name = "LowerThirdRoot"
+	lower_third_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lower_third_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg_rect.add_child(lower_third_root)
+
+	lower_gradient = TextureRect.new()
+	lower_gradient.name = "LowerGradient"
+	lower_gradient.texture = LOWER_GRADIENT_TEX
+	lower_gradient.anchor_left = 0.0
+	lower_gradient.anchor_right = 1.0
+	lower_gradient.anchor_top = 1.0
+	lower_gradient.anchor_bottom = 1.0
+	lower_gradient.offset_left = 0.0
+	lower_gradient.offset_right = 0.0
+	lower_gradient.offset_top = -120.0
+	lower_gradient.offset_bottom = 0.0
+	lower_gradient.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	lower_gradient.stretch_mode = TextureRect.STRETCH_SCALE
+	lower_gradient.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lower_third_root.add_child(lower_gradient)
+
+	# Left-aligned caption text in Theme font
+	caption_label = Label.new()
+	caption_label.name = "CaptionLabel"
+	caption_label.anchor_left = 0.0
+	caption_label.anchor_right = 1.0
+	caption_label.anchor_top = 1.0
+	caption_label.anchor_bottom = 1.0
+	caption_label.offset_left = 28.0
+	caption_label.offset_right = -160.0
+	caption_label.offset_top = -88.0
+	caption_label.offset_bottom = -16.0
+	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	caption_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	caption_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption_label.add_theme_font_override("font", FONT_REGULAR)
+	caption_label.add_theme_font_size_override("font_size", 10)
+	caption_label.add_theme_constant_override("line_spacing", 6)
+	caption_label.add_theme_color_override("font_color", UIConstants.COLOR_BONE_CREAM)
+	caption_label.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.95))
+	caption_label.add_theme_constant_override("shadow_offset_x", 1)
+	caption_label.add_theme_constant_override("shadow_offset_y", 1)
+	caption_label.add_theme_color_override("font_outline_color", Color(0.06, 0.08, 0.07, 0.90))
+	caption_label.add_theme_constant_override("outline_size", 2)
+	caption_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lower_third_root.add_child(caption_label)
+
+	# Crescent Pips indicator replacing [1/9]
+	pips_container = HBoxContainer.new()
+	pips_container.name = "CrescentPipsContainer"
+	pips_container.anchor_left = 1.0
+	pips_container.anchor_right = 1.0
+	pips_container.anchor_top = 1.0
+	pips_container.anchor_bottom = 1.0
+	pips_container.offset_left = -164.0
+	pips_container.offset_right = -24.0
+	pips_container.offset_top = -88.0
+	pips_container.offset_bottom = -72.0
+	pips_container.alignment = BoxContainer.ALIGNMENT_END
+	pips_container.add_theme_constant_override("separation", 5)
+	pips_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lower_third_root.add_child(pips_container)
+
+	pips_list.clear()
+	for i in range(9):
+		var pip := TextureRect.new()
+		pip.name = "Pip_%d" % i
+		pip.custom_minimum_size = Vector2(10.0, 10.0)
+		pip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pip.texture = PIP_EMPTY
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pips_container.add_child(pip)
+		pips_list.append(pip)
+
+	# Continue prompt: Crescent marker + dim "SPACE" hint
+	prompt_container = HBoxContainer.new()
+	prompt_container.name = "PromptContainer"
+	prompt_container.anchor_left = 1.0
+	prompt_container.anchor_right = 1.0
+	prompt_container.anchor_top = 1.0
+	prompt_container.anchor_bottom = 1.0
+	prompt_container.offset_left = -164.0
+	prompt_container.offset_right = -24.0
+	prompt_container.offset_top = -34.0
+	prompt_container.offset_bottom = -16.0
+	prompt_container.alignment = BoxContainer.ALIGNMENT_END
+	prompt_container.add_theme_constant_override("separation", 6)
+	prompt_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lower_third_root.add_child(prompt_container)
+
+	prompt_marker = TextureRect.new()
+	prompt_marker.name = "PromptCrescent"
+	prompt_marker.texture = CRESCENT_MARKER
+	prompt_marker.custom_minimum_size = Vector2(10.0, 10.0)
+	prompt_marker.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	prompt_marker.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	prompt_marker.modulate = Color(1.0, 1.0, 1.0, 0.95)
+	prompt_marker.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	prompt_container.add_child(prompt_marker)
 
 	prompt_label = Label.new()
 	prompt_label.name = "PromptLabel"
-	prompt_label.text = "Press Space or Click to continue  •  [ESC] Skip"
-	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	prompt_label.add_theme_font_override("font", FONT_RES)
-	prompt_label.add_theme_font_size_override("font_size", 10)
-	prompt_label.add_theme_color_override("font_color", Color(0.92, 0.88, 0.82, 0.85))
-	prompt_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
+	prompt_label.text = "SPACE"
+	prompt_label.add_theme_font_override("font", FONT_REGULAR)
+	prompt_label.add_theme_font_size_override("font_size", 9)
+	prompt_label.add_theme_color_override("font_color", UIConstants.COLOR_QUIT_MUTED)
+	prompt_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.90))
 	prompt_label.add_theme_constant_override("shadow_offset_x", 1)
 	prompt_label.add_theme_constant_override("shadow_offset_y", 1)
-	prompt_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	prompt_label.add_theme_constant_override("outline_size", 2)
-	prompt_label.anchor_left = 0.5
-	prompt_label.anchor_right = 0.5
-	prompt_label.anchor_top = 1.0
-	prompt_label.anchor_bottom = 1.0
-	prompt_label.offset_left = -260.0
-	prompt_label.offset_right = 260.0
-	prompt_label.offset_top = -24.0
-	prompt_label.offset_bottom = -8.0
 	prompt_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_root.add_child(prompt_label)
-
-	page_label = Label.new()
-	page_label.name = "PageLabel"
-	page_label.text = "[ 1 / 9 ]"
-	page_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	page_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	page_label.add_theme_font_override("font", FONT_RES)
-	page_label.add_theme_font_size_override("font_size", 10)
-	page_label.add_theme_color_override("font_color", Color(0.82, 0.74, 0.52, 0.80))
-	page_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
-	page_label.add_theme_constant_override("shadow_offset_x", 1)
-	page_label.add_theme_constant_override("shadow_offset_y", 1)
-	page_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-	page_label.add_theme_constant_override("outline_size", 2)
-	page_label.anchor_left = 1.0
-	page_label.anchor_right = 1.0
-	page_label.anchor_top = 1.0
-	page_label.anchor_bottom = 1.0
-	page_label.offset_left = -100.0
-	page_label.offset_right = -18.0
-	page_label.offset_top = -24.0
-	page_label.offset_bottom = -8.0
-	page_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud_root.add_child(page_label)
+	prompt_container.add_child(prompt_label)
 
 
 func _create_paused_tween() -> Tween:
@@ -221,14 +382,13 @@ func _create_paused_tween() -> Tween:
 	return tw
 
 
-func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array, music_path: String = "", is_prologue: bool = false, pauses_tree: bool = false) -> void:
+func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array, music_path: String = "", is_prologue: bool = false, pauses_tree: bool = false, captions: Array[String] = []) -> void:
 	is_active = true
 	is_prologue_mode = is_prologue
 	is_transitioning = false
 	current_panel_idx = 0
 	visible = true
 
-	# Release any button focus in background to prevent Spacebar hijacking
 	if is_inside_tree() and get_viewport():
 		get_viewport().gui_release_focus()
 
@@ -236,13 +396,21 @@ func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array
 	if is_pausing_tree and is_inside_tree():
 		get_tree().paused = true
 
-	# Silence and kill all external menu music and SFX so nothing bleeds into the cutscene
 	_silence_all_external_audio()
 
-	# Setup panels for fast progressive on-demand loading
 	current_panel_paths.clear()
 	for p in panel_paths:
 		current_panel_paths.append(str(p))
+
+	# Setup captions
+	current_captions.clear()
+	if not captions.is_empty():
+		for c in captions:
+			current_captions.append(c)
+	elif is_prologue:
+		for c in PROLOGUE_CAPTIONS:
+			current_captions.append(c)
+
 	active_textures.clear()
 	active_textures.resize(current_panel_paths.size())
 	for i in range(active_textures.size()):
@@ -250,29 +418,30 @@ func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array
 	if not current_panel_paths.is_empty():
 		_get_panel_texture(0)
 
-	# Start Kulintang music track
+	_setup_pips(current_panel_paths.size())
+
 	var track = music_path if music_path != "" else DEFAULT_BGM_PATH
 	play_music_track(track)
 
-	# Prepare visuals (clean, fixed transform, zero jitter)
+	# Visual prep
 	bg_rect.modulate.a = 1.0
 	display_front.texture = null
 	display_front.modulate.a = 1.0
 	display_front.position = Vector2.ZERO
 	display_front.scale = Vector2.ONE
-	display_front.pivot_offset = Vector2.ZERO
+	material_front.set_shader_parameter("dissolve_progress", 1.0)
 	display_back.texture = null
 	display_back.position = Vector2.ZERO
 	display_back.scale = Vector2.ONE
-	display_back.pivot_offset = Vector2.ZERO
-	hud_root.visible = false
-	hud_root.modulate.a = 0.0
+	material_back.set_shader_parameter("dissolve_progress", 1.0)
+
+	lower_third_root.visible = false
+	lower_third_root.modulate.a = 0.0
 
 	if title_tween and title_tween.is_valid():
 		title_tween.kill()
 
 	if title_text != "":
-		# ── Phase 1: Cinematic Title Card (Slow sequenced text fade-in) ────────
 		is_in_title_card = true
 		title_card_box.visible = true
 		title_card_box.modulate.a = 1.0
@@ -287,16 +456,11 @@ func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array
 			lore_label.text = "\"When the sacred moons are swallowed by the void, one masked guardian carries the dawn.\""
 			lore_label.modulate.a = 0.0
 
-			# 1. "THE LAST LIGHT" slowly fades in
-			title_tween.tween_property(title_label, "modulate:a", 1.0, 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			# 2. Quiet pause
-			title_tween.tween_interval(0.6)
-			# 3. Sacred moon lore text slowly fades in
-			title_tween.tween_property(lore_label, "modulate:a", 0.92, 1.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
-			# 4. Hold both on screen for contemplation
-			title_tween.tween_interval(2.5)
-			# 5. Dissolve title card smoothly into comic panel 1
-			title_tween.tween_property(title_card_box, "modulate:a", 0.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+			title_tween.tween_property(title_label, "modulate:a", 1.0, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			title_tween.tween_interval(0.5)
+			title_tween.tween_property(lore_label, "modulate:a", 0.95, 1.4).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+			title_tween.tween_interval(2.2)
+			title_tween.tween_property(title_card_box, "modulate:a", 0.0, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 			title_tween.tween_callback(func():
 				if not is_active:
 					return
@@ -310,7 +474,6 @@ func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array
 			subtitle_label.text = subtitle_text
 			subtitle_label.modulate.a = 0.0
 
-			# Boss cutscene title
 			title_tween.tween_property(title_label, "modulate:a", 1.0, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 			if subtitle_label.visible:
 				title_tween.tween_interval(0.3)
@@ -328,6 +491,37 @@ func play_cutscene(title_text: String, subtitle_text: String, panel_paths: Array
 		is_in_title_card = false
 		title_card_box.visible = false
 		display_first_panel()
+
+
+func _setup_pips(count: int) -> void:
+	for pip in pips_list:
+		pip.queue_free()
+	pips_list.clear()
+
+	for i in range(count):
+		var pip := TextureRect.new()
+		pip.name = "Pip_%d" % i
+		pip.custom_minimum_size = Vector2(10.0, 10.0)
+		pip.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		pip.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		pip.texture = PIP_EMPTY
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pips_container.add_child(pip)
+		pips_list.append(pip)
+
+
+func _update_pips(current_idx: int) -> void:
+	for i in range(pips_list.size()):
+		var pip = pips_list[i]
+		if i < current_idx:
+			pip.texture = PIP_FULL
+			pip.modulate = Color(0.85, 0.81, 0.66, 0.60)
+		elif i == current_idx:
+			pip.texture = PIP_GOLD
+			pip.modulate = Color(1.0, 1.0, 1.0, 1.0)
+		else:
+			pip.texture = PIP_EMPTY
+			pip.modulate = Color(0.40, 0.44, 0.48, 0.50)
 
 
 func _get_panel_texture(idx: int) -> Texture2D:
@@ -355,10 +549,9 @@ func display_first_panel() -> void:
 		return
 
 	display_panel(0, false)
-	hud_root.visible = true
+	lower_third_root.visible = true
 	var tw_hud = _create_paused_tween()
-	tw_hud.tween_property(hud_root, "modulate:a", 1.0, 0.50)
-	_start_prompt_breathing()
+	tw_hud.tween_property(lower_third_root, "modulate:a", 1.0, 0.40)
 
 
 func open_story(as_prologue: bool = false) -> void:
@@ -370,6 +563,7 @@ func close_story(immediate: bool = false) -> void:
 		return
 	is_active = false
 	is_in_title_card = false
+	is_typewriting = false
 	if title_tween and title_tween.is_valid():
 		title_tween.kill()
 	if prompt_tween and prompt_tween.is_valid():
@@ -381,8 +575,6 @@ func close_story(immediate: bool = false) -> void:
 		is_pausing_tree = false
 		get_tree().paused = false
 
-	# If prologue mode, KEEP PURE BLACK and emit signal immediately!
-	# Never fade out to reveal the main menu before game scene loads!
 	if immediate or is_prologue_mode:
 		visible = false
 		story_completed.emit()
@@ -403,65 +595,113 @@ func display_panel(idx: int, animate_crossfade: bool = true) -> void:
 	var new_tex = _get_panel_texture(idx)
 	current_panel_idx = idx
 
-	# Pre-load next panel in sequence to eliminate page turn latency
 	if idx + 1 < current_panel_paths.size():
 		_get_panel_texture(idx + 1)
 
-	if current_panel_paths.size() > 1:
-		page_label.visible = true
-		page_label.text = "[ %d / %d ]" % [idx + 1, current_panel_paths.size()]
-	else:
-		page_label.visible = false
+	_update_pips(idx)
 
-	if is_prologue_mode and idx == current_panel_paths.size() - 1:
-		prompt_label.text = "Press Space or Click to begin the journey  •  [ESC] Skip"
-	else:
-		prompt_label.text = "Press Space or Click to continue  •  [ESC] Skip"
-
-	# Fixed positioning: zero camera jitter/shaking
+	# Reset stepped pan/zoom
+	pan_zoom_step = 0
+	pan_zoom_timer = 0.0
 	display_front.position = Vector2.ZERO
 	display_front.scale = Vector2.ONE
-	display_front.pivot_offset = Vector2.ZERO
-	display_back.position = Vector2.ZERO
-	display_back.scale = Vector2.ONE
-	display_back.pivot_offset = Vector2.ZERO
+
+	# Setup caption and typewriter
+	current_slide_caption = ""
+	if idx < current_captions.size():
+		current_slide_caption = current_captions[idx]
+
+	_start_typewriter(current_slide_caption)
 
 	if not animate_crossfade:
 		is_transitioning = false
 		display_front.texture = new_tex
-		display_front.modulate.a = 1.0
+		material_front.set_shader_parameter("dissolve_progress", 1.0)
 		display_back.texture = null
 		return
 
-	# Smooth crossfade between panels
+	# Dithered dissolve transition
 	is_transitioning = true
 	display_back.texture = display_front.texture
-	display_back.modulate.a = 1.0
+	display_back.position = display_front.position
+	display_back.scale = display_front.scale
+	material_back.set_shader_parameter("dissolve_progress", 1.0)
 
 	display_front.texture = new_tex
-	display_front.modulate.a = 0.0
+	material_front.set_shader_parameter("dissolve_progress", 0.0)
 
 	play_page_turn_sfx()
 
 	var tw = _create_paused_tween()
-	tw.tween_property(display_front, "modulate:a", 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_method(
+		func(val: float):
+			material_front.set_shader_parameter("dissolve_progress", val),
+		0.0,
+		1.0,
+		0.45
+	).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.tween_callback(func():
 		is_transitioning = false
 		display_back.texture = null
 	)
 
 
+func _start_typewriter(text: String) -> void:
+	caption_label.text = text
+	caption_label.visible_characters = 0
+	typewriter_char_index = 0
+	typewriter_timer = 0.0
+	is_typewriting = true
+	prompt_container.visible = false
+	prompt_container.modulate.a = 0.0
+
+	if text == "":
+		_finish_typewriter()
+
+
+func _typewriter_step() -> void:
+	if not is_typewriting:
+		return
+	if typewriter_char_index < current_slide_caption.length():
+		typewriter_char_index += 1
+		caption_label.visible_characters = typewriter_char_index
+		var ch: String = current_slide_caption[typewriter_char_index - 1]
+		typewriter_tick.emit(ch)
+	else:
+		_finish_typewriter()
+
+
+func _finish_typewriter() -> void:
+	is_typewriting = false
+	caption_label.visible_characters = -1
+	prompt_container.visible = true
+	var tw = _create_paused_tween()
+	tw.tween_property(prompt_container, "modulate:a", 1.0, 0.25)
+	_start_prompt_breathing()
+
+
+func _on_typewriter_tick(character: String) -> void:
+	if character == " " or character == "\n" or character == "\t":
+		return
+	play_typewriter_tick_sfx()
+
+
 func next_panel() -> void:
 	if not is_active:
 		return
 	if is_in_title_card:
-		# Fast-forward title card immediately
 		if title_tween and title_tween.is_valid():
 			title_tween.kill()
 		is_in_title_card = false
 		title_card_box.visible = false
 		display_first_panel()
 		return
+
+	# If text is still typing, skip typing first!
+	if is_typewriting:
+		_finish_typewriter()
+		return
+
 	if current_panel_idx < current_panel_paths.size() - 1:
 		display_panel(current_panel_idx + 1, true)
 	else:
@@ -471,11 +711,12 @@ func next_panel() -> void:
 func prev_panel() -> void:
 	if not is_active or is_in_title_card:
 		return
+	if is_typewriting:
+		_finish_typewriter()
 	if current_panel_idx > 0:
 		display_panel(current_panel_idx - 1, true)
 
 
-# High priority input interceptor: consumes Space, Enter, Escape, Clicks so background never receives them
 func _input(event: InputEvent) -> void:
 	if not is_active:
 		return
@@ -501,10 +742,13 @@ func _input(event: InputEvent) -> void:
 func _start_prompt_breathing() -> void:
 	if prompt_tween and prompt_tween.is_valid():
 		prompt_tween.kill()
-	prompt_label.modulate.a = 0.85
+	prompt_marker.modulate.a = 0.95
+	prompt_label.modulate.a = 0.70
 	prompt_tween = _create_paused_tween().set_loops()
-	prompt_tween.tween_property(prompt_label, "modulate:a", 0.40, 1.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	prompt_tween.tween_property(prompt_label, "modulate:a", 0.85, 1.1).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	prompt_tween.tween_property(prompt_marker, "modulate:a", 0.40, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	prompt_tween.parallel().tween_property(prompt_label, "modulate:a", 0.35, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	prompt_tween.tween_property(prompt_marker, "modulate:a", 0.95, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	prompt_tween.parallel().tween_property(prompt_label, "modulate:a", 0.70, 1.0).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
 func play_music_track(path: String) -> void:
@@ -526,7 +770,7 @@ func play_music_track(path: String) -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_ENTER_TREE:
-		if is_active and is_instance_valid(bgm_player) and bgm_player.stream != null and not bgm_player.playing:
+		if is_active and is_instance_valid(bgm_player) and bgm_player.is_inside_tree() and bgm_player.stream != null and not bgm_player.playing:
 			bgm_player.play()
 
 
@@ -541,14 +785,12 @@ func _silence_all_external_audio() -> void:
 	var root_node = get_tree().root
 	if not is_instance_valid(root_node):
 		return
-	# Silence any MenuBGMPlayer and MenuSFXPlayer across the tree
 	for n in root_node.find_children("MenuBGMPlayer", "AudioStreamPlayer", true, false):
 		if is_instance_valid(n) and n is AudioStreamPlayer:
 			n.stop()
 	for n in root_node.find_children("MenuSFXPlayer", "AudioStreamPlayer", true, false):
 		if is_instance_valid(n) and n is AudioStreamPlayer:
 			n.stop()
-	# Silence any gameplay BGMPlayer across the tree
 	for n in root_node.find_children("BGMPlayer", "AudioStreamPlayer", true, false):
 		if is_instance_valid(n) and n is AudioStreamPlayer:
 			n.stop()
@@ -563,6 +805,33 @@ func fade_out_music() -> void:
 		if is_instance_valid(bgm_player):
 			bgm_player.stop()
 	)
+
+
+func play_typewriter_tick_sfx() -> void:
+	if not is_inside_tree() or not is_instance_valid(typewriter_sfx_player):
+		return
+	var sample_rate: int = 22050
+	var duration: float = 0.018
+	var total_samples: int = int(sample_rate * duration)
+	var data := PackedByteArray()
+	data.resize(total_samples * 2)
+
+	for i in range(total_samples):
+		var t: float = float(i) / float(sample_rate)
+		var env: float = 1.0 - (t / duration)
+		var click = sin(TAU * 780.0 * t) * env * 0.28
+		var val: int = clampi(int(click * 32767.0), -32768, 32767)
+		data.encode_s16(i * 2, val)
+
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = sample_rate
+	stream.stereo = false
+	stream.data = data
+
+	typewriter_sfx_player.stream = stream
+	typewriter_sfx_player.pitch_scale = randf_range(0.92, 1.08)
+	typewriter_sfx_player.play()
 
 
 func play_page_turn_sfx() -> void:

@@ -135,6 +135,18 @@ func _init() -> void:
 	theme.set_font_size("font_size", "MutedBodyLabel", C.FONT_SIZE_BODY)
 	theme.set_color("font_color", "MutedBodyLabel", C.COLOR_BONE_MUTED)
 
+	# DangerLabel (#8a3b32 - muted brick red for low health, damage warnings)
+	theme.set_type_variation("DangerLabel", "Label")
+	theme.set_font("font", "DangerLabel", f_ui)
+	theme.set_font_size("font_size", "DangerLabel", C.FONT_SIZE_BODY)
+	theme.set_color("font_color", "DangerLabel", C.COLOR_DANGER_RED)
+
+	# DangerHeaderLabel (#8a3b32 - header size)
+	theme.set_type_variation("DangerHeaderLabel", "Label")
+	theme.set_font("font", "DangerHeaderLabel", fv_subtitle)
+	theme.set_font_size("font_size", "DangerHeaderLabel", C.FONT_SIZE_HEADER)
+	theme.set_color("font_color", "DangerHeaderLabel", C.COLOR_DANGER_BRIGHT)
+
 	# LockedEntryLabel
 	theme.set_type_variation("LockedEntryLabel", "Label")
 	theme.set_font("font", "LockedEntryLabel", f_ui)
